@@ -1,0 +1,44 @@
+services:
+  # 1. Base de données
+  postgres:
+    image: postgres:15-alpine
+    container_name: qcore_db
+    environment:
+      POSTGRES_USER: quantum
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: quantum_core
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. Moteur de Calcul (Python)
+  engine:
+    build: ./apps/engine
+    container_name: qcore_engine
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/engine:/app
+    environment:
+      - INTERNAL_API_SECRET=super-secret-quantum-key-2026
+      - PYTHONUNBUFFERED=1
+
+  # 3. Studio (Next.js)
+  # Pour le dev local, on utilise souvent npm run dev directement sur la machine 
+  # pour avoir le HMR (Hot Reload) rapide, mais voici la config Docker si besoin.
+  # studio:
+  #   build: 
+  #     context: .
+  #     dockerfile: apps/studio/Dockerfile
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - DATABASE_URL=postgresql://quantum:password@postgres:5432/quantum_core
+  #     - ENGINE_URL=http://engine:8000
+  #   depends_on:
+  #     - postgres
+  #     - engine
+
+volumes:
+  postgres_data:

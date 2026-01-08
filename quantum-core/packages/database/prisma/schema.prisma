@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- UTILISATEURS (NextAuth standard) ---
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  projects  Project[]
+  createdAt DateTime  @default(now())
+}
+
+// --- CORE : PROJET ---
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  domain      String   // "WATER", "ENERGY", etc.
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  nodes       Node[]
+  edges       Edge[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// --- CORE : NŒUDS (L'abstraction des Cuves, Pompes, etc.) ---
+model Node {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  type        String   // "TANK", "PUMP", "FILTER" (Défini dans le JSON de config)
+  label       String   // Nom affiché à l'écran
+  
+  // LA MAGIE : Toutes les propriétés techniques sont ici
+  // ex: { "volume": 1000, "material": "HDPE" }
+  properties  Json     @db.JsonB
+  
+  // Position UI
+  positionX   Float    @default(0)
+  positionY   Float    @default(0)
+
+  inputs      Edge[]   @relation("EdgeTarget")
+  outputs     Edge[]   @relation("EdgeSource")
+}
+
+// --- CORE : LIENS (L'abstraction des Tuyaux, Câbles) ---
+model Edge {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  sourceId    String
+  targetId    String
+  source      Node     @relation("EdgeSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target      Node     @relation("EdgeTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  type        String   // "PIPE", "CABLE"
+  properties  Json     @db.JsonB // ex: { "diameter": 50, "flow_max": 10 }
+}
+
+model CatalogItem {
+  id          String   @id @default(cuid())
+  domain      String   // "WATER", "ENERGY"
+  category    String   // "PUMP", "TANK"
+  name        String
+  specs       Json     @db.JsonB
+  createdAt   DateTime @default(now())
+}
