@@ -1,0 +1,4627 @@
+--- FILE SYSTEM STRUCTURE ---
+808-quantum-core/
+    README.md
+    context.py
+    Book/
+        introduction.md
+        sprint0.md
+        sprint1.md
+        sprint2.md
+        sprint3.md
+        sprint4.md
+        sprint5.md
+        sprint6.md
+    quantum-core/
+        .gitignore
+        .npmrc
+        README.md
+        docker-compose.yml
+        package.json
+        pnpm-workspace.yaml
+        turbo.json
+        .turbo/
+            cache/
+            cookies/
+            daemon/
+            preferences/
+                tui.json
+        apps/
+            engine/
+                main.py
+                domains/
+                    energy/
+                        solver.py
+                    water/
+                        proposal.py
+                        solver.py
+            studio/
+                .env.local
+                .gitignore
+                README.md
+                eslint.config.js
+                next-env.d.ts
+                next.config.js
+                package.json
+                postcss.config.js
+                tsconfig.json
+                app/
+                    globals.css
+                    layout.tsx
+                    page.module.css
+                    page.tsx
+                    actions/
+                        catalog.ts
+                        graph.ts
+                        library.ts
+                        line.ts
+                        project.ts
+                        sequence.ts
+                        simulation.ts
+                    fonts/
+                    library/
+                        page.tsx
+                components/
+                    canvas/
+                        flow-editor.tsx
+                        generic-node.tsx
+                    layout/
+                        catalog-selector.tsx
+                        header.tsx
+                        line-selector.tsx
+                        node-palette.tsx
+                        project-initializer.tsx
+                        properties-panel.tsx
+                        sequence-manager.tsx
+                    library/
+                        library-manager.tsx
+                    ui/
+                        dynamic-icon.tsx
+                        tabs.tsx
+                lib/
+                    domain-config.ts
+                    registry.ts
+                    domains/
+                        water.ts
+                public/
+                store/
+                    canvas-store.ts
+        packages/
+            database/
+                .env
+                index.ts
+                package.json
+                prisma.config.ts
+                prisma/
+                    schema.prisma
+            eslint-config/
+                README.md
+                base.js
+                next.js
+                package.json
+                react-internal.js
+            typescript-config/
+                base.json
+                nextjs.json
+                package.json
+                react-library.json
+            ui/
+                eslint.config.mjs
+                package.json
+                tsconfig.json
+                src/
+                    button.tsx
+                    card.tsx
+                    code.tsx
+
+--- FILE CONTENTS ---
+
+================================================================================
+FILE: README.md
+================================================================================
+[Error reading file: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte]
+
+================================================================================
+FILE: context.py
+================================================================================
+import os
+
+# --- CONFIGURATION ---
+# Directories to completely ignore
+IGNORE_DIRS = {
+    'node_modules', '.next', '.venv', '.git', '.vincent', 
+    'dist', 'build', '__pycache__', '.vscode', 'book', 'docs', 'ressources'
+}
+
+# Specific files to ignore (like heavy lock files)
+IGNORE_FILES = {
+    'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', '.DS_Store'
+}
+
+# File extensions to include
+INCLUDE_EXTENSIONS = {
+    '.ts', '.tsx', '.js', '.jsx', '.json', '.prisma', 
+    '.py', '.css', '.html', '.md', '.env', '.yml', '.yaml', '.mjs'
+}
+
+OUTPUT_FILE = "project_summary.txt"
+
+def generate_tree(startpath):
+    tree_str = "--- FILE SYSTEM STRUCTURE ---\n"
+    for root, dirs, files in os.walk(startpath):
+        # Remove ignored directories from search
+        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+        
+        level = root.replace(startpath, '').count(os.sep)
+        indent = ' ' * 4 * level
+        tree_str += f"{indent}{os.path.basename(root)}/\n"
+        sub_indent = ' ' * 4 * (level + 1)
+        
+        for f in sorted(files):
+            # Only show files in tree if they aren't ignored
+            if f not in IGNORE_FILES and (any(f.endswith(ext) for ext in INCLUDE_EXTENSIONS) or f.startswith('.')):
+                tree_str += f"{sub_indent}{f}\n"
+    return tree_str
+
+def get_file_contents(startpath):
+    content_str = "\n--- FILE CONTENTS ---\n"
+    for root, dirs, files in os.walk(startpath):
+        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+        
+        for file in sorted(files):
+            if file in IGNORE_FILES:
+                continue
+                
+            file_path = os.path.join(root, file)
+            relative_path = os.path.relpath(file_path, startpath)
+            
+            # Only read the file if it has a relevant extension
+            if any(file.endswith(ext) for ext in INCLUDE_EXTENSIONS):
+                content_str += f"\n{'='*80}\n"
+                content_str += f"FILE: {relative_path}\n"
+                content_str += f"{'='*80}\n"
+                
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content_str += f.read() + "\n"
+                except Exception as e:
+                    content_str += f"[Error reading file: {e}]\n"
+    return content_str
+
+def main():
+    root_dir = os.getcwd()
+    print(f"Scanning: {root_dir}")
+    
+    tree = generate_tree(root_dir)
+    contents = get_file_contents(root_dir)
+    
+    with open(OUTPUT_FILE, "w", encoding='utf-8') as output:
+        output.write(tree)
+        output.write(contents)
+        
+    print(f"Success! Project summary saved to: {OUTPUT_FILE}")
+
+if __name__ == "__main__":
+    main()
+
+================================================================================
+FILE: Book\introduction.md
+================================================================================
+# Introduction : L'Avènement de Quantum Core
+
+## 1. La Genèse : Sortir de l'Enfer du "One-Shot"
+
+Dans le monde du développement logiciel pour l'ingénierie industrielle, un schéma se répète inlassablement. Un expert (en traitement de l'eau, en thermique ou en acoustique) a besoin d'un outil. On développe pour lui une application monolithique, rigide, où la logique métier est "codée en dur".
+
+Si demain ce même expert veut adapter l'outil pour un domaine voisin, il faut tout réécrire. Le code est jetable, la dette technique s'accumule, et l'intelligence artificielle est souvent une pensée après-coup.
+
+**Quantum Core** né d'un refus de ce modèle.
+
+Ce projet n'est pas une application de traitement de surface. C'est une **usine à logiciels d'ingénierie**. Notre ambition est de créer un "Système d'Exploitation" (OS) pour le génie technique, capable de modéliser, simuler et optimiser n'importe quel flux physique (eau, électrons, chaleur, argent) à travers une interface web moderne et un moteur de calcul surpuissant.
+
+## 2. La Philosophie : "Meta-Modélisation" et Abstraction
+
+La pierre angulaire de Quantum Core tient en une phrase : **Ne codez pas le métier, configurez-le.**
+
+Dans une application classique, on créerait une table `Reservoir` avec une colonne `volume`. Dans Quantum Core, nous créons une entité abstraite `Node` (Nœud) qui reçoit une configuration `properties` (JSON).
+
+*   Pour **QuantumH2O**, ce nœud sera une "Cuve" avec un volume et un pH.
+*   Pour **QuantumEnergy**, ce même nœud sera une "Batterie" avec une capacité et un voltage.
+
+Cette abstraction s'étend à trois niveaux :
+1.  **L'Interface (UI) :** Un canevas infini agnostique capable de dessiner n'importe quel graphe.
+2.  **La Donnée (Data) :** Un schéma de base de données polymorphique.
+3.  **Le Calcul (Engine) :** Un moteur mathématique qui résout des matrices de transfert, peu importe ce qu'elles transportent.
+
+## 3. L'Architecture Hybride : Le Meilleur des Deux Mondes
+
+L'ingénierie moderne fait face à un dilemme technologique :
+*   Le web (JavaScript/TypeScript) est roi pour l'interface utilisateur, l'interactivité et la gestion de projet.
+*   La science (Python) est reine pour le calcul matriciel, l'optimisation et l'Intelligence Artificielle.
+
+Plutôt que de choisir, Quantum Core adopte une architecture **Hybride de Haute Précision**.
+
+### Le "Cerveau Gauche" : Next.js (Orchestration)
+C'est le maître d'œuvre. Il gère :
+*   L'authentification et la sécurité (RBAC).
+*   L'interface utilisateur (React, Tailwind, ReactFlow).
+*   La persistance des données (PostgreSQL via Prisma).
+*   La relation client (CMS, Leads).
+
+### Le "Cerveau Droit" : FastAPI (Intelligence)
+C'est l'expert technique, isolé dans son micro-service. Il gère :
+*   L'algèbre linéaire (NumPy) pour les bilans de masse et d'énergie.
+*   L'IA Générative (LangChain/LLM) pour l'analyse de cahiers des charges (RAG) et la rédaction technique.
+*   Il est "Stateless" : on lui envoie un problème (JSON), il renvoie une solution.
+
+## 4. La Stack Technique (2025/2026 Ready)
+
+Nous avons sélectionné des technologies éprouvées, typées et performantes :
+
+*   **Langages :** TypeScript (Strict) & Python 3.11+.
+*   **Frontend/BFF :** Next.js 15 (App Router, Server Actions).
+*   **Backend Engine :** FastAPI + NumPy + Pydantic.
+*   **Base de Données :** PostgreSQL (avec support JSONB et pgvector).
+*   **ORM :** Prisma (pour la sécurité des types).
+*   **Repo Management :** Turborepo (Monorepo) + pnpm.
+*   **Infrastructure :** Docker Compose (Dev) / Architecture Conteneurisée (Prod).
+
+## 5. Les Défis à Relever
+
+Construire une telle plateforme n'est pas trivial. Tout au long de ce livre, nous documenterons comment nous avons surmonté les obstacles majeurs :
+
+1.  **La Complexité de l'Abstraction :** Comment créer une UI générique qui reste ergonomique pour l'utilisateur final ?
+2.  **La Synchronisation des Types :** Comment s'assurer qu'un objet `Tank` en TypeScript correspond parfaitement à un modèle `Tank` en Python sans duplication manuelle ?
+3.  **La Performance :** Comment faire communiquer deux langages différents (latence réseau, sérialisation JSON) sans ralentir l'expérience utilisateur lors de calculs lourds ?
+4.  **L'Intégration de l'IA :** Comment passer d'un "Chatbot gadget" à un véritable assistant ingénieur capable de dimensionner une usine ?
+
+Ce livre est le journal de bord de cette construction. Bienvenue dans l'ingénierie de demain.
+
+================================================================================
+FILE: Book\sprint0.md
+================================================================================
+# Chapitre 1 : Sprint 0 - Les Fondations de l'Usine
+
+## 1. Objectif du Sprint
+
+Avant de poser la première brique de logique métier (calculer un pH ou dimensionner une cuve), nous devions construire l'usine elle-même. Dans un projet d'une telle envergure, la dette technique se paie *cash* dès le troisième mois si l'architecture initiale est bancale.
+
+L'objectif du Sprint 0 était clair : **Mettre sur pied un environnement de développement unifié capable de faire cohabiter TypeScript (l'Interface) et Python (le Calcul) de manière fluide et typée.**
+
+Nous ne voulions pas de deux dépôts Git séparés qui finissent par se désynchroniser. Nous voulions une **Source de Vérité Unique**.
+
+## 2. La Stratégie Monorepo (Turborepo & pnpm)
+
+Pour gérer cette polyglottie (JS/TS + Python), nous avons opté pour une structure **Monorepo** gérée par **Turborepo**.
+
+### Pourquoi ce choix ?
+1.  **Code Partagé :** Le schéma de base de données (Prisma) doit être accessible par le backend Next.js (`apps/studio`) mais aussi potentiellement par des scripts de maintenance, sans duplication.
+2.  **Atomicité :** Une seule commande `pnpm install` installe les dépendances de tout le projet. Une seule commande `docker-compose up` lance toute l'infrastructure.
+
+### L'Arborescence Cible
+Nous avons structuré le projet ainsi :
+
+```text
+quantum-core/
+├── apps/
+│   ├── studio/       # (Next.js 15) Le cockpit de l'ingénieur
+│   └── engine/       # (FastAPI) Le micro-service de calcul Python
+├── packages/
+│   ├── database/     # Le schéma Prisma et le client généré
+│   ├── ui-kit/       # (Futur) Les composants React réutilisables
+│   └── typescript/   # Configs TS partagées
+├── docker-compose.yml
+└── turbo.json
+```
+
+Cette structure isole proprement les responsabilités : le `studio` gère l'humain, l'`engine` gère la physique, et `packages` gère la structure.
+
+## 3. Le Schéma de Données "Meta-Model"
+
+Le cœur de notre philosophie de réutilisabilité réside dans la base de données. Au lieu de créer des tables spécifiques (`Tank`, `Pump`), nous avons conçu un modèle abstrait dans `packages/database`.
+
+Nous avons utilisé **PostgreSQL** pour sa robustesse et **Prisma** pour l'expérience développeur (DX).
+
+### Le changement de paradigme
+*   **Avant (Approche classique) :** Une table par équipement. Si on veut ajouter un "Panneau Solaire", on doit migrer la DB.
+*   **Après (Quantum Core) :** Une table `Node` universelle.
+    *   `type`: String ("TANK", "SOLAR_PANEL")
+    *   `properties`: **JSONB**. C'est ici que réside la flexibilité. PostgreSQL valide le format JSON, et nos validateurs applicatifs (Pydantic/Zod) valideront le contenu métier.
+
+## 4. L'Orchestration Hybride (Docker)
+
+Le défi principal était de faire tourner côte à côte un environnement Node.js et un environnement Python.
+
+Nous avons conteneurisé le moteur Python (`apps/engine`) pour une raison simple : **l'isolation des dépendances**. Les librairies scientifiques (NumPy, SciPy) ont besoin de binaires système spécifiques. Docker garantit que le calcul s'exécute exactement de la même manière sur le PC du développeur et sur le serveur de production.
+
+Le fichier `docker-compose.yml` agit comme le chef d'orchestre :
+1.  Il lève **PostgreSQL**.
+2.  Il lève l'**Engine Python** (port 8000).
+3.  Il expose ces services au réseau local pour que **Next.js** (qui tourne souvent en local hors Docker pour la vitesse de dev) puisse s'y connecter.
+
+---
+
+## 5. Rétrospective : Difficultés Rencontrées et Solutions
+
+Comme tout démarrage de projet technique ambitieux, ce Sprint 0 ne s'est pas déroulé sans accrocs. Voici les trois défis majeurs que nous avons surmontés pour stabiliser la stack.
+
+### Défi n°1 : Le "Breaking Change" de Prisma 7
+**Le Problème :** Nous avons adopté la toute dernière version de Prisma (v7.2.0). Lors de la génération du client, nous avons rencontré l'erreur `P1012`. La définition de l'URL de connexion directement dans `schema.prisma` (`url = env("...")`) est devenue obsolète et interdite.
+
+**La Solution :**
+Nous avons dû adopter la nouvelle norme de configuration de Prisma 7.
+1.  Création d'un fichier dédié `prisma.config.ts` dans le package database.
+2.  Utilisation de l'helper `env` importé depuis `@prisma/config`.
+3.  Suppression des propriétés `url` et `provider` du bloc `datasource` dans le fichier `schema.prisma`.
+
+*Leçon apprise :* Toujours vérifier les "Release Notes" des outils majeurs avant de commencer, surtout sur les versions "Bleeding Edge".
+
+### Défi n°2 : La Rigueur de pnpm dans un Monorepo
+**Le Problème :** Lors de l'installation des dépendances (`dotenv`, `@prisma/config`), nous avons eu des erreurs `ERR_PNPM_ADDING_TO_ROOT`. De plus, pnpm refusait d'installer des paquets dans `packages/database` car il ne le reconnaissait pas comme un module valide.
+
+**La Solution :**
+1.  Nous avons créé un fichier `package.json` explicite dans `packages/database` définissant son nom (`@repo/database`) et ses exports.
+2.  Nous avons appris à utiliser les filtres pnpm ou à naviguer dans le dossier spécifique avant d'installer : `cd packages/database && pnpm add ...`.
+3.  Nous avons banni l'utilisation mixte de `npm` et `pnpm` pour éviter les conflits de lockfiles.
+
+### Défi n°3 : L'Orchestration des Tâches avec Turbo
+**Le Problème :** La commande `npx turbo run db:generate` échouait car Turborepo ne savait pas que cette tâche existait.
+
+**La Solution :**
+Il a fallu configurer explicitement le "Pipeline" dans `turbo.json`. Nous avons déclaré la tâche `db:generate` et indiqué qu'elle ne produisait pas d'artefacts de cache persistants, permettant ainsi d'exécuter la génération du client Prisma depuis la racine du projet en une seule commande.
+
+---
+
+### Conclusion du Chapitre 1
+
+À la fin de ce Sprint 0, nous avons une **usine logicielle fonctionnelle**.
+*   Le moteur Python répond "OK".
+*   La base de données est provisionnée avec un schéma générique.
+*   Le frontend Next.js est prêt à démarrer.
+
+Le terrain est déminé. Nous pouvons maintenant passer au **Sprint 1** : Créer le premier pont de communication réel entre Next.js et Python pour initier un calcul.
+
+================================================================================
+FILE: Book\sprint1.md
+================================================================================
+# Chapitre 2 : Sprint 1 - Le Lien Neuronal
+
+## 1. Objectif du Sprint
+
+Une fois l'usine construite (Sprint 0), nous avions deux cerveaux isolés : le cerveau gauche (Next.js) capable de gérer l'utilisateur, et le cerveau droit (Python) capable de calculer. Le but du Sprint 1 était de créer une synapse artificielle entre eux.
+
+Le défi n'était pas seulement technique ("faire une requête HTTP"), mais architectural : **Comment garantir que seul notre frontend Next.js puisse solliciter le moteur de calcul, tout en protégeant ce dernier du monde extérieur ?**
+
+## 2. Le Pattern "Backend-for-Frontend" (BFF)
+
+Nous avons choisi d'utiliser Next.js non seulement comme un serveur de rendu (SSR), mais comme une **API Gateway**.
+
+Dans notre architecture, le navigateur du client ne parle **jamais** directement à Python.
+*   ❌ *Mauvais :* `Browser` -> `Python API` (Problèmes de CORS, d'authentification double, d'exposition de l'IP).
+*   ✅ *Bon (Notre choix) :* `Browser` -> `Next.js Server Action` -> `Python API`.
+
+Next.js agit comme un **Proxy de confiance**. Il vérifie l'identité de l'humain (via le cookie de session), puis il endosse son rôle de "système" pour parler à Python.
+
+## 3. Sécurité : Le Secret Partagé (Internal Secret)
+
+Puisque Next.js et Python tournent dans un réseau privé (Docker ou VPC), nous n'avons pas besoin d'OAuth2 complexe pour leur communication. Nous avons opté pour un **Secret d'API Interne** (`INTERNAL_API_SECRET`).
+
+C'est une clé cryptographique longue, connue uniquement des deux serveurs via leurs variables d'environnement.
+1.  Next.js injecte cette clé dans le header `x-internal-secret` à chaque requête.
+2.  FastAPI intercepte la requête grâce à une "Dependency" (`verify_secret`) et rejette impitoyablement tout appel qui ne possède pas ce sésame (Erreur 403).
+
+Ce mécanisme simple est extrêmement robuste pour la communication machine-à-machine (M2M).
+
+## 4. Le Contrat d'Interface (Payload JSON)
+
+Pour que l'abstraction fonctionne, les deux systèmes doivent parler la même langue. Nous avons défini un format de données pivot en JSON :
+
+```json
+{
+  "domain": "WATER",
+  "nodes": [ { "id": "1", "type": "TANK", "properties": {...} } ],
+  "edges": [ { "source": "1", "target": "2", "properties": {...} } ]
+}
+```
+
+*   **Côté Python (Pydantic) :** Ce JSON est automatiquement validé et converti en objets Python typés. Si Next.js envoie un champ manquant, Python renvoie une erreur explicite avant même de lancer le calcul.
+*   **Côté TypeScript :** Nous avons typé le payload pour garantir que les développeurs frontend envoient des structures conformes.
+
+## 5. Rétrospective : Pourquoi le "Server Action" change tout ?
+
+Avant Next.js 14, nous aurions dû créer une route API (`pages/api/calculate.ts`) et l'appeler via `fetch` depuis le client React.
+
+Avec les **Server Actions**, nous avons pu écrire une fonction asynchrone `runSimulationAction` qui s'exécute directement sur le serveur, mais que l'on appelle depuis le bouton React comme une fonction locale.
+*   **Gain de sécurité :** La clé API secrète ne quitte jamais le serveur. Elle n'est pas visible dans le code source du navigateur ("Network Tab").
+*   **Simplicité :** Pas de gestion de `JSON.stringify` ou de headers côté client. L'appel ressemble à un simple appel de fonction JavaScript.
+
+---
+
+### Conclusion du Chapitre 2
+
+Le "système nerveux" de Quantum Core est opérationnel. Nous avons prouvé qu'un clic sur une interface React peut déclencher un algorithme Python isolé et récupérer des KPIs structurés.
+
+La route est ouverte pour le **Sprint 2** : Nous allons maintenant attaquer le cœur de l'innovation de Quantum Core : **L'Interface pilotée par la Configuration (Config-Driven UI).** Nous allons arrêter d'envoyer des données fictives et permettre à l'utilisateur de créer ses propres nœuds.
+
+
+
+================================================================================
+FILE: Book\sprint2.md
+================================================================================
+# Chapitre 3 : Sprint 2 - L'Interface Polymorphe
+
+## 1. Le Piège de l'Interface "Métier"
+
+Dans le développement d'applications industrielles, l'erreur classique est de créer des composants React nommés `<TankCard />`, `<PumpWidget />` ou `<SolarPanel />`.
+
+Cette approche semble naturelle au début, mais elle devient un cauchemar de maintenance. Si vous voulez créer **QuantumEnergy** après **QuantumH2O**, vous devez dupliquer et renommer tous vos composants. Le code devient rigide.
+
+L'objectif du Sprint 2 était de briser ce lien. Nous voulions une interface **agnostique** qui ne connaît rien au métier, mais qui sait tout afficher.
+
+## 2. Le concept de "Domain Manifest"
+
+Nous avons introduit un fichier de configuration central : `domain-config.ts`. C'est l'ADN du produit.
+
+```typescript
+// Ce simple objet transforme l'application
+export const WATER_CONFIG = {
+  nodeTypes: {
+    TANK: { label: "Cuve", icon: Beaker, color: "blue" },
+    PUMP: { label: "Pompe", icon: Fan, color: "slate" }
+  }
+};
+```
+
+Grâce à ce manifeste, le composant `<NodePalette />` n'a pas besoin de savoir ce qu'il affiche. Il boucle simplement sur la configuration. C'est ce qu'on appelle une **Config-Driven UI**.
+
+## 3. Le Moteur de Rendu Visuel (ReactFlow)
+
+Pour le Canvas, nous avons choisi **ReactFlow** (désormais `@xyflow/react`).
+
+Au lieu de créer plusieurs types de nœuds dans ReactFlow, nous avons enregistré un seul type universel : **`genericNode`**.
+Ce composant agit comme un caméléon. Il reçoit un `type` ("TANK" ou "PUMP"), consulte le Manifeste pour savoir quelle couleur et quelle icône utiliser, et se rend en conséquence.
+
+**Résultat :** Pour ajouter un nouvel équipement dans le logiciel, il n'y a plus de code React à écrire. Il suffit d'ajouter 3 lignes dans le fichier JSON de configuration.
+
+## 4. Gestion d'État (Zustand)
+
+Pour manipuler ce graphe (Ajout, Suppression, Connexion), nous avons utilisé **Zustand**. Contrairement à Redux (trop verbeux) ou Context API (problèmes de performance sur les gros graphes), Zustand offre un compromis parfait pour gérer l'état local du Canvas avant de le sauvegarder en base de données.
+
+## 5. Rétrospective : Le Défi du Styling (Tailwind v4)
+
+Ce sprint a été marqué par un défi technique inattendu lié à l'infrastructure frontend : la migration vers **Tailwind CSS v4**.
+
+**Le Problème :**
+Nous avons initialisé le projet avec les dernières versions disponibles. Tailwind v4 a radicalement changé son architecture (abandon du fichier `tailwind.config.ts` classique, nouveau plugin PostCSS). Cela a cassé le style de notre application Monorepo, rendant l'interface illisible.
+
+**La Résolution :**
+Nous avons dû reconfigurer la chaîne de build CSS :
+1.  Installation explicite du plugin `@tailwindcss/postcss`.
+2.  Configuration d'un fichier `postcss.config.mjs` minimaliste.
+3.  Adoption de la directive CSS native `@import "tailwindcss";`.
+
+*Leçon apprise :* Dans un environnement Monorepo (Turborepo), la gestion des dépendances "peer" (comme PostCSS/Tailwind) doit être explicite dans chaque sous-projet (`apps/studio`) pour éviter les conflits de résolution.
+
+
+================================================================================
+FILE: Book\sprint3.md
+================================================================================
+# Chapitre 4 : Sprint 3 - La Mémoire du Graphe
+
+## 1. L'Enjeu de la Persistance Générique
+Sauvegarder un graphe est une tâche complexe. Sauvegarder un graphe dont on ne connaît pas les propriétés à l'avance (le propre de Quantum Core) est un défi architectural. 
+
+L'objectif de ce sprint était de transformer nos composants visuels éphémères en enregistrements permanents dans **PostgreSQL**.
+
+## 2. Le Choix Technologique : Driver Adapters et JSONB
+Nous avons utilisé **Prisma 7**. Cette version moderne impose une séparation stricte entre la définition du schéma et la connexion réelle. 
+
+*   **JSONB pour la flexibilité :** Pour rester "agnostiques", nous ne créons pas de colonnes pour chaque propriété physique (volume, tension, débit). Nous utilisons une colonne unique de type `Json` (JSONB en PostgreSQL). Cela permet de stocker n'importe quelle structure de données métier sans jamais migrer la base de données.
+*   **Driver Adapters :** Pour garantir la compatibilité avec les environnements "Serverless" et "Edge", nous avons implémenté l'instanciation du client via `@prisma/adapter-pg`.
+
+## 3. Stratégie de Sauvegarde : "Atomic Replace"
+Pour ce premier palier, nous avons opté pour une stratégie de sauvegarde simple mais robuste : la transaction atomique. À chaque clic sur "Sauvegarder", le système :
+1. Ouvre une transaction SQL.
+2. Supprime l'ancien état du graphe pour le projet donné.
+3. Réinsère les nouveaux nœuds et liens avec leurs positions et propriétés JSON.
+Cela garantit qu'on ne se retrouve jamais avec un graphe "partiel" ou corrompu en cas d'erreur réseau.
+
+## 4. Rétrospective : Les Pièges de la Configuration de Base de Données
+Le passage à Prisma 7 et l'architecture Monorepo ont révélé des difficultés majeures de "plomberie" technique :
+
+*   **Le Défi du Localhost :** Sur Windows, la résolution de `localhost` vers Docker est souvent instable pour les drivers Node.js. Nous avons résolu les erreurs de connexion (P1001) en basculant sur l'adresse IP explicite `127.0.0.1`.
+*   **L'Isolation des Secrets :** Dans un Monorepo, Prisma ne charge pas toujours automatiquement le fichier `.env` du dossier parent. Nous avons dû forcer le chargement des variables d'environnement via un fichier `prisma.config.ts` explicite utilisant l'helper `env()`.
+*   **L'Instanciation du Client :** Nous avons appris que `new PrismaClient()` ne suffit plus lorsque l'`url` est absente du schéma. Il faut lui injecter manuellement l'adaptateur de driver configuré avec le Pool de connexion PostgreSQL.
+
+---
+
+
+================================================================================
+FILE: Book\sprint4.md
+================================================================================
+# Chapitre 5 : Sprint 4 - L'Intelligence des Objets
+
+## 1. De la Forme à la Fonction
+Un logiciel d'ingénierie se distingue d'un outil de dessin par sa capacité à porter de la donnée métier. L'objectif du Sprint 4 était de transformer nos "Nœuds" génériques en véritables fiches techniques interactives.
+
+Nous avons relevé un défi architectural : comment créer un éditeur de propriétés sans savoir à l'avance quels champs seront nécessaires (Volume pour l'eau, Tension pour l'énergie, etc.) ?
+
+## 2. Le Moteur de Rendu de Formulaires (Schema-Driven UI)
+Nous avons implémenté un **Générateur de Formulaire Dynamique**. Au lieu de coder des composants `<InputVolume />`, nous avons créé un composant `PropertiesPanel` qui :
+1. Détecte le type de l'objet sélectionné.
+2. Lit la `FieldDefinition` dans le Manifeste du Domaine.
+3. Génère les champs (Input, Select, Number) à la volée.
+
+Cette approche garantit que Quantum Core reste 100% agnostique. Le code du panneau de droite est le même pour tous les métiers ; seul le fichier de configuration change.
+
+## 3. Synchronisation d'État et UX
+L'un des points délicats a été la synchronisation entre la sélection visuelle (ReactFlow) et l'état de l'application (Zustand). En interceptant les événements de changement de nœuds, nous avons assuré que le panneau de propriétés reste parfaitement aligné avec le curseur de l'utilisateur.
+
+L'utilisation du stockage **JSONB** dans PostgreSQL a prouvé sa valeur ici : nous avons pu sauvegarder des structures de données radicalement différentes (une cuve et une pompe) dans la même table, sans aucune altération de schéma.
+
+## 4. Rétrospective : La Puissance de l'Abstraction
+À la fin de ce sprint, nous avons validé la théorie du "Meta-Model" :
+*   Nous pouvons ajouter un paramètre "Viscosité" à une cuve en modifiant une seule ligne de JSON.
+*   L'interface s'adapte instantanément.
+*   La base de données accepte la donnée sans broncher.
+*   Le développeur n'a pas touché au code "Core".
+
+
+================================================================================
+FILE: Book\sprint5.md
+================================================================================
+C'est une étape historique pour le projet. Nous avons prouvé que **Quantum Core** n'est pas qu'un outil de dessin, mais un cerveau capable de traiter des données physiques complexes.
+
+Voici le **Chapitre 6** pour ton livre technique, documentant cette réussite, suivi du lancement du **Sprint 6**.
+
+***
+
+# Chapitre 6 : Sprint 5 - Le Réveil de l'Intelligence
+
+## 1. La Fin de l'Amnésie Physique
+Jusqu'au sprint précédent, Quantum Core était une "coquille vide" : il stockait des données mais ne les comprenait pas. L'objectif du Sprint 5 était de boucler la boucle cybernétique : **Interface $\rightarrow$ Serveur $\rightarrow$ Moteur de Calcul $\rightarrow$ Interface**.
+
+Nous avons implémenté le premier véritable échange asynchrone entre l'orchestrateur Next.js et l'expert Python en utilisant des données saisies en temps réel par l'utilisateur.
+
+## 2. Le Mapping de Données (Payload Transformation)
+L'un des défis techniques a été la transformation du graphe visuel (ReactFlow) en un modèle mathématique exploitable. 
+*   ReactFlow manipule des objets lourds contenant des informations de rendu (coordonnées pixel, état de drag, etc.).
+*   Nous avons développé un "Mapper" dans la Server Action qui nettoie ces données pour n'extraire que la substantifique moelle : le type de nœud et son dictionnaire de propriétés JSONB.
+
+Cette étape garantit que le moteur Python reste léger et ne traite que de la physique, sans se soucier de l'interface.
+
+## 3. L'Analyse Topologique en Python
+Le moteur FastAPI a été doté de sa première logique d'ingénierie. En utilisant les propriétés extraites du JSONB, Python est désormais capable de :
+1. Parcourir la liste des équipements.
+2. Extraire dynamiquement les valeurs numériques (ex: volumes).
+3. Effectuer des agrégations (Somme des volumes totaux).
+4. Analyser la topologie du graphe pour détecter des erreurs de conception (équipements isolés).
+
+## 4. L'Interface de Feedback (Dashboard d'Analyse)
+Nous avons créé un composant de header réactif capable de gérer deux états de chargement parallèles (Sauvegarde DB et Simulation Engine). Le résultat de la simulation est présenté sous forme de **KPI Cards** et de **Warnings**, permettant à l'utilisateur de valider sa conception instantanément sans changer de page.
+
+---
+
+# Sprint 6 : Le Flux de Masse (Hydraulique & Connexions)
+
+**Objectif :** Faire circuler "quelque chose" dans les tuyaux. 
+Actuellement, nous avons calculé une somme de volumes (statique). Pour concevoir une station d'épuration, nous avons besoin de **débits** (dynamique). Nous allons faire en sorte que les **liens** (Edges) entre les équipements portent une information de flux.
+
+### 1. Mise à jour du Manifeste (`lib/domain-config.ts`)
+Nous allons définir les propriétés des **liens** (Edges). Un tuyau n'est pas juste un trait, il a un diamètre et un débit.
+
+```typescript
+// apps/studio/lib/domain-config.ts
+export const WATER_CONFIG = {
+  // ... nodeTypes ...
+  edgeTypes: {
+    PIPE: {
+      id: "PIPE",
+      label: "Tuyauterie",
+      color: "blue-400",
+      fields: [
+        { id: "flowRate", label: "Débit circulant", type: "number", unit: "m³/h", default: 0 },
+      ]
+    }
+  }
+};
+```
+
+### 2. Le Moteur Python : Loi des Nœuds (Bilan de Masse)
+Nous allons implémenter en Python une règle d'or de l'ingénierie : **La conservation de la masse**.
+*   Pour chaque cuve, Python va calculer : `Somme(Entrées) - Somme(Sorties)`.
+*   Si le résultat n'est pas zéro, il enverra un **Alerte de Débordement** ou de **Vidange**.
+
+### 3. UI : Édition des liens
+Il faut pouvoir cliquer sur un "tuyau" pour définir son débit, exactement comme on le fait pour une cuve.
+
+### Pourquoi c'est le "vrai" début de Quantum ?
+C'est ici que l'algorithme commence à aider l'ingénieur. Le logiciel va dire : *"Attention, tu envoies 10m³/h dans cette cuve mais ta pompe de sortie n'en rejette que 8. Ta cuve va déborder dans 2 heures."*
+
+**Es-tu prêt à coder la logique des flux ?**
+
+================================================================================
+FILE: Book\sprint6.md
+================================================================================
+C'est une étape symbolique. En implémentant la loi de conservation de la masse, vous venez de transformer un simple éditeur de schémas en un **Jumeau Numérique (Digital Twin)** rudimentaire. Votre logiciel "comprend" maintenant les conséquences physiques des choix de l'ingénieur.
+
+Voici le **Chapitre 7** pour votre livre technique, suivi du lancement du **Sprint 7**.
+
+***
+
+# Chapitre 7 : Sprint 6 — La Dynamique des Flux
+
+## 1. De la Statique à la Cinétique
+Jusqu'ici, Quantum Core ne traitait que des données isolées (le volume d'une cuve). L'objectif du Sprint 6 était de donner vie aux interconnexions. En ingénierie, un système est défini par ce qui circule entre ses composants. 
+
+Nous avons introduit la notion de **Lien Porteur de Données** (Smart Edges). Un tuyau n'est plus seulement une ligne graphique, c'est un objet possédant ses propres attributs physiques, comme le débit horaire ($m^3/h$).
+
+## 2. Abstraction des Edges
+Fidèles à notre philosophie de "Meta-Modélisation", nous avons étendu le Manifeste du Domaine pour inclure les `edgeTypes`. Cela permet à l'interface de générer dynamiquement des panneaux de configuration pour les liaisons, exactement comme pour les équipements. Cette symétrie architecturale entre Nœuds et Liens est la clé de la flexibilité de Quantum Core.
+
+## 3. Le Premier "Juge" Physique : Le Bilan de Masse
+C'est dans le moteur Python que l'innovation est la plus flagrante. Nous avons implémenté la **Loi des Nœuds**. 
+Pour chaque équipement, le solveur calcule désormais la différence entre les flux entrants et sortants. 
+*   **Résultat > 0** : Risque de débordement.
+*   **Résultat < 0** : Risque de désamorçage ou vidange.
+
+Le logiciel passe du rôle d'outil de saisie à celui de **Conseiller Technique**. Il ne se contente plus de stocker ce que dit l'utilisateur, il le confronte à la réalité physique.
+
+## 4. Rétrospective : La Gestion des Sélections Hybrides
+Le défi UI de ce sprint a été de gérer une sélection "double" dans le panneau de propriétés. L'utilisateur doit pouvoir passer d'une cuve à un tuyau sans que l'interface ne s'interrompe. Nous avons résolu cela en implémentant un état de sélection mutuellement exclusif dans le Store Zustand, garantissant une expérience utilisateur fluide et sans ambiguïté.
+
+---
+
+# Sprint 7 : Le Catalogue et le "Sizing" (Dimensionnement)
+
+**Objectif :** Ne plus saisir des valeurs au hasard, mais choisir du matériel réel. 
+Un ingénieur ne dit pas "je veux une pompe de 10 $m^3/h$", il choisit une pompe dans un catalogue et vérifie si elle convient.
+
+### 1. La Base de Données "Catalogue"
+Nous allons utiliser la table `CatalogItem` de notre schéma Prisma pour stocker des équipements réels (ex: Pompe Grundfos, Filtre industriel).
+
+### 2. UI : Le Sélecteur de Composant
+Dans le panneau de propriétés, nous allons ajouter un bouton "Choisir dans le catalogue". 
+Cela ouvrira une liste d'équipements compatibles avec le type de nœud sélectionné (ex: si je clique sur une Pompe, je ne vois que des pompes).
+
+### 3. Intelligence : Le "Auto-Fill" et la Validation
+*   Quand l'utilisateur choisit une pompe de 12 $m^3/h$ dans le catalogue, le champ `flowRate` du nœud se remplit tout seul.
+*   Le moteur Python pourra alors comparer la performance de l'équipement choisi avec le besoin réel du système.
+
+### Pourquoi c'est l'étape cruciale pour le business ?
+C'est ici que Quantum Core commence à générer de la valeur commerciale (établi le prix). Si chaque objet du catalogue a un prix, nous pouvons calculer instantanément le **coût total de l'installation (CAPEX)**.
+
+**Es-tu prêt à intégrer le catalogue d'équipements ?**
+
+================================================================================
+FILE: quantum-core\README.md
+================================================================================
+# Turborepo starter
+
+This Turborepo starter is maintained by the Turborepo core team.
+
+## Using this example
+
+Run the following command:
+
+```sh
+npx create-turbo@latest
+```
+
+## What's inside?
+
+This Turborepo includes the following packages/apps:
+
+### Apps and Packages
+
+- `docs`: a [Next.js](https://nextjs.org/) app
+- `web`: another [Next.js](https://nextjs.org/) app
+- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
+- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
+- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+
+Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+
+### Utilities
+
+This Turborepo has some additional tools already setup for you:
+
+- [TypeScript](https://www.typescriptlang.org/) for static type checking
+- [ESLint](https://eslint.org/) for code linting
+- [Prettier](https://prettier.io) for code formatting
+
+### Build
+
+To build all apps and packages, run the following command:
+
+```
+cd my-turborepo
+
+# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
+turbo build
+
+# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
+npx turbo build
+yarn dlx turbo build
+pnpm exec turbo build
+```
+
+You can build a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+
+```
+# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
+turbo build --filter=docs
+
+# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
+npx turbo build --filter=docs
+yarn exec turbo build --filter=docs
+pnpm exec turbo build --filter=docs
+```
+
+### Develop
+
+To develop all apps and packages, run the following command:
+
+```
+cd my-turborepo
+
+# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
+turbo dev
+
+# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
+npx turbo dev
+yarn exec turbo dev
+pnpm exec turbo dev
+```
+
+You can develop a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+
+```
+# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
+turbo dev --filter=web
+
+# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
+npx turbo dev --filter=web
+yarn exec turbo dev --filter=web
+pnpm exec turbo dev --filter=web
+```
+
+### Remote Caching
+
+> [!TIP]
+> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+
+Turborepo can use a technique known as [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+
+By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+
+```
+cd my-turborepo
+
+# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
+turbo login
+
+# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
+npx turbo login
+yarn exec turbo login
+pnpm exec turbo login
+```
+
+This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+
+Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+
+```
+# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
+turbo link
+
+# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
+npx turbo link
+yarn exec turbo link
+pnpm exec turbo link
+```
+
+## Useful Links
+
+Learn more about the power of Turborepo:
+
+- [Tasks](https://turborepo.com/docs/crafting-your-repository/running-tasks)
+- [Caching](https://turborepo.com/docs/crafting-your-repository/caching)
+- [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching)
+- [Filtering](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters)
+- [Configuration Options](https://turborepo.com/docs/reference/configuration)
+- [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
+
+
+================================================================================
+FILE: quantum-core\docker-compose.yml
+================================================================================
+services:
+  # 1. Base de données
+  postgres:
+    image: postgres:15-alpine
+    container_name: qcore_db
+    environment:
+      POSTGRES_USER: quantum
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: quantum_core
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. Moteur de Calcul (Python)
+  engine:
+    build: ./apps/engine
+    container_name: qcore_engine
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/engine:/app
+    environment:
+      - INTERNAL_API_SECRET=super-secret-quantum-key-2026
+      - PYTHONUNBUFFERED=1
+
+  # 3. Studio (Next.js)
+  # Pour le dev local, on utilise souvent npm run dev directement sur la machine 
+  # pour avoir le HMR (Hot Reload) rapide, mais voici la config Docker si besoin.
+  # studio:
+  #   build: 
+  #     context: .
+  #     dockerfile: apps/studio/Dockerfile
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - DATABASE_URL=postgresql://quantum:password@postgres:5432/quantum_core
+  #     - ENGINE_URL=http://engine:8000
+  #   depends_on:
+  #     - postgres
+  #     - engine
+
+volumes:
+  postgres_data:
+
+================================================================================
+FILE: quantum-core\package.json
+================================================================================
+{
+  "name": "quantum-core",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "check-types": "turbo run check-types"
+  },
+  "devDependencies": {
+    "prettier": "^3.7.4",
+    "turbo": "^2.7.3",
+    "typescript": "5.9.2"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=18"
+  }
+}
+
+
+================================================================================
+FILE: quantum-core\pnpm-workspace.yaml
+================================================================================
+packages:
+  - "apps/*"
+  - "packages/*"
+
+
+================================================================================
+FILE: quantum-core\turbo.json
+================================================================================
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".next/**", "!.next/cache/**"]
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "check-types": {
+      "dependsOn": ["^check-types"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "db:generate": {
+      "cache": false
+    },
+    "db:push": {
+      "cache": false
+    }
+  }
+}
+
+
+================================================================================
+FILE: quantum-core\.turbo\preferences\tui.json
+================================================================================
+{
+  "is_task_list_visible": true,
+  "active_task": "@repo/database#db:push"
+}
+
+================================================================================
+FILE: quantum-core\apps\engine\main.py
+================================================================================
+import os
+from fastapi import FastAPI, Header, HTTPException, Depends
+from pydantic import BaseModel
+from typing import Dict, Any, List
+from domains.water.solver import run_water_simulation
+from domains.water.proposal import generate_water_proposal
+
+app = FastAPI(title="Quantum Core Engine")
+INTERNAL_SECRET = os.getenv("INTERNAL_API_SECRET")
+
+class Node(BaseModel):
+    id: str
+    type: str
+    properties: Dict[str, Any]
+
+class Edge(BaseModel):
+    source: str
+    target: str
+    properties: Dict[str, Any]
+
+class SimulationPayload(BaseModel):
+    domain: str
+    nodes: List[Node]
+    edges: List[Edge]
+
+async def verify_secret(x_internal_secret: str = Header(None)):
+    if not INTERNAL_SECRET or x_internal_secret != INTERNAL_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+@app.post("/simulate", dependencies=[Depends(verify_secret)])
+def simulate(payload: SimulationPayload):
+    # STRATEGY PATTERN : On choisit le solveur selon le domaine
+    if payload.domain == "WATER":
+        return run_water_simulation(payload.nodes, payload.edges)
+    
+    # Prêt pour QuantumEnergy
+    # elif payload.domain == "ENERGY":
+    #     return run_energy_simulation(...)
+    
+    raise HTTPException(status_code=400, detail=f"Domaine {payload.domain} non supporté")
+
+@app.post("/generate-proposal", dependencies=[Depends(verify_secret)])
+def generate_proposal(payload: SimulationPayload):
+    # STRATEGY PATTERN : On choisit le générateur selon le domaine
+    if payload.domain == "WATER":
+        proposal = generate_water_proposal(payload.nodes, payload.edges)
+        return {"proposal": proposal}
+    
+    raise HTTPException(status_code=400, detail=f"Le domaine {payload.domain} n'est pas supporté pour la génération de propositions.")
+
+================================================================================
+FILE: quantum-core\apps\engine\domains\energy\solver.py
+================================================================================
+
+
+================================================================================
+FILE: quantum-core\apps\engine\domains\water\proposal.py
+================================================================================
+from typing import List, Dict, Any
+
+def generate_water_proposal(nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]):
+    """
+    Placeholder function to generate a proposal for the water domain.
+    In a real scenario, this would involve a more complex logic,
+    potentially calling a generative AI model.
+    """
+    
+    # For now, let's return a simple mock proposal
+    proposal = {
+        "message": "Proposal generated successfully!",
+        "details": "This is a mock proposal. Replace with actual generative logic.",
+        "recommended_actions": [
+            "Add a new pump between node A and B.",
+            "Increase the capacity of the main reservoir."
+        ],
+        "node_count": len(nodes),
+        "edge_count": len(edges)
+    }
+    
+    return proposal
+
+
+================================================================================
+FILE: quantum-core\apps\engine\domains\water\solver.py
+================================================================================
+import numpy as np
+
+def run_water_simulation(nodes, edges):
+    # 1. Extraction des paramètres
+    # On cherche les bacs et on indexe pour la matrice
+    tanks = [n for n in nodes if n.type in ["TANK", "RINSE"]]
+    idx_map = {node.id: i for i, node in enumerate(tanks)}
+    n_tanks = len(tanks)
+
+    # 2. Initialisation des Matrices (Bilan pour 1 ion par défaut pour le test)
+    # A : Matrice des coefficients de transfert (L/h)
+    # B : Vecteur des sources (Apport de pollution g/h)
+    A = np.zeros((n_tanks, n_tanks))
+    B = np.zeros(n_tanks)
+
+    for i, tank in enumerate(tanks):
+        props = tank.properties
+        # Pertes : Sortie via tuyaux + Sortie via pièces
+        Q_out = sum(float(e.properties.get("flowRate", 0)) for e in edges if e.source == tank.id)
+        
+        # Drag-out (Entraînement pièces)
+        cadence = float(props.get("surfacePerHour", 0))
+        drag_out_factor = float(props.get("dragOut", 0))
+        Q_dragout = cadence * drag_out_factor
+        
+        # Diagonale de la matrice (Sorties totales du bac i)
+        A[i, i] = Q_out + Q_dragout
+
+        # Apports venant d'autres bacs (Cascades)
+        for edge in [e for e in edges if e.target == tank.id]:
+            if edge.source in idx_map:
+                source_idx = idx_map[edge.source]
+                flow = float(edge.properties.get("flowRate", 0))
+                A[i, source_idx] = -flow
+
+        # Cas spécifique : Si c'est un bac de process (Source de pollution)
+        if tank.type == "TANK":
+            # On simule une concentration de 50g/L dans le bain de process
+            B[i] = Q_dragout * 50.0 
+
+    # 3. Résolution Mathématique (Ax = B)
+    try:
+        # Résolution du système linéaire
+        concentrations = np.linalg.solve(A, B)
+        # On arrondit pour l'affichage
+        res_list = [round(c, 3) for c in concentrations]
+    except np.linalg.LinAlgError:
+        res_list = [0] * n_tanks
+
+    # 4. Préparation des KPIs
+    return {
+        "status": "success",
+        "kpis": [
+            {"label": "Max Pollution", "value": max(res_list) if res_list else 0, "unit": "g/L"},
+            {"label": "Moyenne Rinçages", "value": np.mean(res_list[1:]) if len(res_list) > 1 else 0, "unit": "g/L"}
+        ],
+        "node_details": {tanks[i].id: {"conc": res_list[i]} for i in range(n_tanks)}
+    }
+
+================================================================================
+FILE: quantum-core\apps\studio\README.md
+================================================================================
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load Inter, a custom Google Font.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+================================================================================
+FILE: quantum-core\apps\studio\eslint.config.js
+================================================================================
+import { nextJsConfig } from "@repo/eslint-config/next-js";
+
+/** @type {import("eslint").Linter.Config[]} */
+export default nextJsConfig;
+
+
+================================================================================
+FILE: quantum-core\apps\studio\next-env.d.ts
+================================================================================
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+import "./.next/dev/types/routes.d.ts";
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+
+
+================================================================================
+FILE: quantum-core\apps\studio\next.config.js
+================================================================================
+/** @type {import('next').NextConfig} */
+const nextConfig = {};
+
+export default nextConfig;
+
+
+================================================================================
+FILE: quantum-core\apps\studio\package.json
+================================================================================
+{
+  "name": "studio",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint --max-warnings 0",
+    "check-types": "next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@repo/database": "workspace:*",
+    "@repo/ui": "workspace:*",
+    "@xyflow/react": "^12.10.0",
+    "clsx": "^2.1.1",
+    "gray-matter": "^4.0.3",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.562.0",
+    "next": "16.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.4.0",
+    "zustand": "^5.0.9"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/node": "^22.15.3",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "autoprefixer": "^10.4.23",
+    "eslint": "^9.39.1",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "typescript": "5.9.2"
+  }
+}
+
+
+================================================================================
+FILE: quantum-core\apps\studio\postcss.config.js
+================================================================================
+export default {
+  plugins: {
+    "@tailwindcss/postcss": {},
+    autoprefixer: {},
+  },
+}
+
+
+================================================================================
+FILE: quantum-core\apps\studio\tsconfig.json
+================================================================================
+{
+  "extends": "@repo/typescript-config/nextjs.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "next-env.d.ts",
+    "next.config.js",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
+
+
+================================================================================
+FILE: quantum-core\apps\studio\app\globals.css
+================================================================================
+@import "tailwindcss";
+html, body, #__next {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  overflow: hidden; /* Important pour une app "Full Screen" */
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\app\layout.tsx
+================================================================================
+import type { Metadata } from "next";
+import { Inter } from "next/font/google"; // Optionnel
+import "./globals.css"; // <--- CETTE LIGNE EST OBLIGATOIRE !
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Quantum Core Studio",
+  description: "Engineering Platform",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="fr">
+      <body className={inter.className}>{children}</body>
+    </html>
+  );
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\app\page.module.css
+================================================================================
+.page {
+  --gray-rgb: 0, 0, 0;
+  --gray-alpha-200: rgba(var(--gray-rgb), 0.08);
+  --gray-alpha-100: rgba(var(--gray-rgb), 0.05);
+
+  --button-primary-hover: #383838;
+  --button-secondary-hover: #f2f2f2;
+
+  display: grid;
+  grid-template-rows: 20px 1fr 20px;
+  align-items: center;
+  justify-items: center;
+  min-height: 100svh;
+  padding: 80px;
+  gap: 64px;
+  font-synthesis: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .page {
+    --gray-rgb: 255, 255, 255;
+    --gray-alpha-200: rgba(var(--gray-rgb), 0.145);
+    --gray-alpha-100: rgba(var(--gray-rgb), 0.06);
+
+    --button-primary-hover: #ccc;
+    --button-secondary-hover: #1a1a1a;
+  }
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  grid-row-start: 2;
+}
+
+.main ol {
+  font-family: var(--font-geist-mono);
+  padding-left: 0;
+  margin: 0;
+  font-size: 14px;
+  line-height: 24px;
+  letter-spacing: -0.01em;
+  list-style-position: inside;
+}
+
+.main li:not(:last-of-type) {
+  margin-bottom: 8px;
+}
+
+.main code {
+  font-family: inherit;
+  background: var(--gray-alpha-100);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.ctas {
+  display: flex;
+  gap: 16px;
+}
+
+.ctas a {
+  appearance: none;
+  border-radius: 128px;
+  height: 48px;
+  padding: 0 20px;
+  font-family: var(--font-geist-sans);
+  border: 1px solid transparent;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+a.primary {
+  background: var(--foreground);
+  color: var(--background);
+  gap: 8px;
+}
+
+a.secondary {
+  border-color: var(--gray-alpha-200);
+  min-width: 180px;
+}
+
+button.secondary {
+  appearance: none;
+  border-radius: 128px;
+  height: 48px;
+  padding: 0 20px;
+  font-family: var(--font-geist-sans);
+  border: 1px solid transparent;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 500;
+  background: transparent;
+  border-color: var(--gray-alpha-200);
+  min-width: 180px;
+}
+
+.footer {
+  font-family: var(--font-geist-sans);
+  grid-row-start: 3;
+  display: flex;
+  gap: 24px;
+}
+
+.footer a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer img {
+  flex-shrink: 0;
+}
+
+/* Enable hover only on non-touch devices */
+@media (hover: hover) and (pointer: fine) {
+  a.primary:hover {
+    background: var(--button-primary-hover);
+    border-color: transparent;
+  }
+
+  a.secondary:hover {
+    background: var(--button-secondary-hover);
+    border-color: transparent;
+  }
+
+  .footer a:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+}
+
+@media (max-width: 600px) {
+  .page {
+    padding: 32px;
+    padding-bottom: 80px;
+  }
+
+  .main {
+    align-items: center;
+  }
+
+  .main ol {
+    text-align: center;
+  }
+
+  .ctas {
+    flex-direction: column;
+  }
+
+  .ctas a {
+    font-size: 14px;
+    height: 40px;
+    padding: 0 16px;
+  }
+
+  a.secondary {
+    min-width: auto;
+  }
+
+  .footer {
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .logo {
+    filter: invert();
+  }
+}
+
+
+================================================================================
+FILE: quantum-core\apps\studio\app\page.tsx
+================================================================================
+// apps/studio/app/page.tsx
+
+import { NodePalette } from '@/components/layout/node-palette';
+import { FlowEditor } from '@/components/canvas/flow-editor';
+import { Header } from '@/components/layout/header';
+import { PropertiesPanel } from '@/components/layout/properties-panel';
+import { ProjectInitializer } from '@/components/layout/project-initializer';
+import { SequenceManager } from '@/components/layout/sequence-manager'; // <--- AJOUT SPRINT 13
+
+// Actions Server
+import { getOrCreateDefaultProject } from './actions/project';
+import { loadGraph } from './actions/graph';
+import { db } from '@repo/database';
+// Configuration Dynamique (Quantum Core Strategy)
+import { getDomainConfig } from '@/lib/registry';
+import { getLines, createLine } from './actions/line';
+
+const EMPTY_SEQUENCES = []; // Référence stable pour le tableau vide
+
+export default async function EngineeringStudio(props: {
+  searchParams: Promise<{ lineId?: string }>
+}) {  // 1. DÉTERMINATION DU DOMAINE (Le "Cœur" de l'abstraction)
+  const config = getDomainConfig();
+
+  // 2. RÉCUPÉRATION DES DONNÉES (Persistance PostgreSQL)
+  const project = await getOrCreateDefaultProject();
+  
+  let lines = await db.line.findMany({ where: { projectId: project.id } });
+
+  if (lines.length === 0) {
+    const newLine = await db.line.create({ 
+        data: { name: "Ligne Principale", projectId: project.id } 
+    });
+    lines = [newLine];
+  }
+
+  const searchParams = await props.searchParams;
+  const currentLineId = searchParams.lineId || lines[0].id;
+
+  const initialGraph = await loadGraph(currentLineId);
+  
+  // On charge les gammes associées à la ligne
+  const sequencesFromDb = await db.sequence.findMany({
+    where: { lineId: currentLineId },
+    include: {
+      steps: {
+        orderBy: { order: 'asc' }
+      }
+    }
+  });
+
+  // On transforme les données du format Prisma vers le format du Store Zustand
+  const initialSequences = sequencesFromDb.map(s => ({
+    ...s,
+    properties: s.properties as Record<string, any>,
+    steps: s.steps.map(step => step.nodeId)
+  }));
+
+  return (
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-white text-slate-900">
+      
+      <ProjectInitializer 
+        projectId={project.id} 
+        lineId={currentLineId}
+        initialNodes={initialGraph.nodes} 
+        initialEdges={initialGraph.edges}
+        initialSequences={initialSequences}
+      />
+      
+      <Header config={config} lines={lines} currentLineId={currentLineId} />
+
+      <main className="flex-1 flex overflow-hidden">
+        <NodePalette config={config} />
+        
+        <div className="flex-1 relative">
+           <FlowEditor />
+        </div>
+
+        <PropertiesPanel config={config} />
+      </main>
+      
+      {/* PANNEAU DE GESTION DES GAMMES - SPRINT 13 */}
+      <SequenceManager />
+
+      {/* Indicateur de domaine discret en bas à gauche */}
+      <div className="fixed bottom-4 left-4 z-50 pointer-events-none">
+        <div className="bg-white/80 backdrop-blur-sm border border-slate-200 px-2 py-1 rounded-md shadow-sm">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">
+            Quantum Core Engine <span className="text-blue-600">v1.0</span> | Mode : {config.id}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\app\actions\catalog.ts
+================================================================================
+'use server';
+
+import { db } from '@repo/database';
+
+
+export async function seedCatalog() {
+  const items = [
+    {
+      domain: "WATER",
+      category: "PUMP",
+      name: "Pompe doseuse Grundfos DDA",
+      specs: { flow: 30, power: 0.5, price: 1200 }
+    },
+    {
+      domain: "WATER",
+      category: "PUMP",
+      name: "Pompe de transfert IWAKI MDX",
+      specs: { flow: 15, power: 0.2, price: 850 }
+    },
+    {
+      domain: "WATER",
+      category: "TANK",
+      name: "Cuve PEHD 1000L Standard",
+      specs: { volume: 1000, price: 500, material: "PP" }
+    }
+  ];
+
+  for (const item of items) {
+    await db.catalogItem.upsert({
+      where: { id: item.name }, // On utilise le nom comme ID temporaire pour le seed
+      update: {},
+      create: { ...item, id: item.name }
+    });
+  }
+  return { success: true };
+}
+
+export async function getCatalogItems(category: string) {
+  return await db.catalogItem.findMany({
+    where: { category, domain: "WATER" }
+  });
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\app\actions\graph.ts
+================================================================================
+'use server';
+
+import { db } from '@repo/database';
+import { revalidatePath } from 'next/cache';
+
+/**
+ * Charge les noeuds et les liens pour une ligne donnée et les transforme
+ * pour le format attendu par React Flow.
+ */
+export async function loadGraph(lineId: string) {
+  if (!lineId) {
+    return { nodes: [], edges: [] };
+  }
+
+  const rawNodes = await db.node.findMany({
+    where: { lineId },
+  });
+
+  const rawEdges = await db.edge.findMany({
+    where: { lineId },
+  });
+
+  // Transformation des données Prisma vers le format de React Flow
+  const nodes = rawNodes.map(node => ({
+    id: node.id,
+    type: 'genericNode', // On utilise toujours notre noeud générique
+    position: { x: node.positionX, y: node.positionY },
+    data: {
+      type: node.type,
+      label: node.label,
+      role: node.role,
+      properties: node.properties as Record<string, any>,
+    },
+  }));
+
+  const edges = rawEdges.map(edge => ({
+    id: edge.id,
+    source: edge.sourceId,
+    target: edge.targetId,
+    type: 'default',
+    data: edge.properties as Record<string, any>,
+  }));
+
+  return { nodes, edges };
+}
+
+export async function saveGraph(lineId: string, nodes: any[], edges: any[]) {
+  if (!lineId) return;
+
+  try {
+    await db.$transaction(async (tx) => {
+      // Upsert all nodes
+      for (const node of nodes) {
+        await tx.node.upsert({
+          where: { id: node.id },
+          update: {
+            positionX: node.position.x,
+            positionY: node.position.y,
+            label: node.data.label,
+            properties: node.data.properties,
+          },
+          create: {
+            id: node.id,
+            lineId: lineId,
+            positionX: node.position.x,
+            positionY: node.position.y,
+            type: node.data.type,
+            label: node.data.label,
+            role: node.data.role,
+            properties: node.data.properties,
+          },
+        });
+      }
+
+      // Upsert all edges
+      for (const edge of edges) {
+        await tx.edge.upsert({
+          where: { id: edge.id },
+          update: {
+            properties: edge.data,
+          },
+          create: {
+            id: edge.id,
+            lineId: lineId,
+            sourceId: edge.source,
+            targetId: edge.target,
+            properties: edge.data,
+            category: edge.type === 'default' ? 'PHYSICAL' : 'LOGICAL',
+          },
+        });
+      }
+    });
+
+    revalidatePath('/');
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to save graph:", error);
+    return { success: false, error: "La sauvegarde du graphe a échoué." };
+  }
+}
+
+export async function deleteNodeAction(nodeId: string) {
+  try {
+    await db.node.delete({
+      where: { id: nodeId },
+    });
+    revalidatePath('/');
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to delete node:", error);
+    return { success: false, error: "La suppression du nœud a échoué." };
+  }
+}
+
+export async function deleteEdgeAction(edgeId: string) {
+  try {
+    await db.edge.delete({
+      where: { id: edgeId },
+    });
+    revalidatePath('/');
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to delete edge:", error);
+    return { success: false, error: "La suppression du lien a échoué." };
+  }
+}
+
+
+================================================================================
+FILE: quantum-core\apps\studio\app\actions\library.ts
+================================================================================
+'use server';
+
+import { db } from '@repo/database';
+import { revalidatePath } from 'next/cache';
+
+// --- GESTION DES UNITÉS DE BASE (ex: Ions) ---
+export async function upsertBaseUnit(domain: string, data: any) {
+  const { id, name, symbol, properties } = data;
+  await db.baseUnit.upsert({
+    where: { id: id || 'new_id' },
+    update: { name, symbol, properties },
+    create: { name, symbol, properties, domain }
+  });
+  revalidatePath('/library');
+}
+
+// --- GESTION DES ARTICLES (ex: Produits Chimiques) ---
+export async function upsertReferenceItem(domain: string, data: any) {
+  const { id, name, category, properties, composition } = data;
+
+  return await db.$transaction(async (tx) => {
+    const item = await tx.referenceItem.upsert({
+      where: { id: id || 'new_item' },
+      update: { name, category, properties },
+      create: { name, category, properties, domain }
+    });
+
+    // Mise à jour de la composition (Dissociation)
+    await tx.itemComposition.deleteMany({ where: { referenceItemId: item.id } });
+    
+    if (composition && composition.length > 0) {
+      await tx.itemComposition.createMany({
+        data: composition.map((c: any) => ({
+          referenceItemId: item.id,
+          baseUnitId: c.baseUnitId,
+          coefficient: parseFloat(c.coefficient)
+        }))
+      });
+    }
+    return item;
+  });
+}
+
+export async function getLibrary(domain: string) {
+  const baseUnits = await db.baseUnit.findMany({ where: { domain } });
+  const referenceItems = await db.referenceItem.findMany({
+    where: { domain },
+    include: { composition: { include: { baseUnit: true } } }
+  });
+  return { baseUnits, referenceItems };
+}
+
+
+
+export async function importLibraryJson(domain: string, jsonData: any) {
+  try {
+    await db.$transaction(async (tx) => {
+      // 1. Import des Unités de Base (Ions)
+      if (jsonData.ions) {
+        for (const ion of jsonData.ions) {
+          await tx.baseUnit.upsert({
+            where: { id: ion.symbol || ion.name }, // On utilise le symbole comme identifiant
+            update: { 
+              name: ion.name, 
+              symbol: ion.symbol, 
+              properties: { molarMass: ion.molarMass, charge: ion.charge } 
+            },
+            create: { 
+              id: ion.symbol || ion.name,
+              domain,
+              name: ion.name, 
+              symbol: ion.symbol, 
+              properties: { molarMass: ion.molarMass, charge: ion.charge } 
+            }
+          });
+        }
+      }
+
+      // 2. Import des Articles de Référence (Produits)
+      if (jsonData.products) {
+        for (const prod of jsonData.products) {
+          const item = await tx.referenceItem.upsert({
+            where: { name: prod.name },
+            update: { 
+              category: "REAGENT", 
+              properties: { density: prod.density, purity: prod.purity, fds: prod.fds } 
+            },
+            create: { 
+              domain,
+              name: prod.name, 
+              category: "REAGENT", 
+              properties: { density: prod.density, purity: prod.purity, fds: prod.fds } 
+            }
+          });
+
+          // Nettoyage de l'ancienne composition
+          await tx.itemComposition.deleteMany({ where: { referenceItemId: item.id } });
+
+          // Création de la nouvelle composition (Liens vers les BaseUnits créés juste avant)
+          if (prod.composition) {
+            for (const comp of prod.composition) {
+              const baseUnit = await tx.baseUnit.findFirst({ 
+                where: { symbol: comp.ionSymbol, domain } 
+              });
+              
+              if (baseUnit) {
+                await tx.itemComposition.create({
+                  data: {
+                    referenceItemId: item.id,
+                    baseUnitId: baseUnit.id,
+                    coefficient: comp.coefficient
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+    });
+
+    revalidatePath('/library');
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { success: false, error: "Erreur lors de l'import" };
+  }
+}
+
+
+
+
+
+
+export async function getWaterLibrary() {
+  return await db.referenceItem.findMany({
+    where: { domain: "WATER" },
+    include: { composition: { include: { baseUnit: true } } }
+  });
+}
+
+
+
+================================================================================
+FILE: quantum-core\apps\studio\app\actions\line.ts
+================================================================================
+'use server';
+import { db } from '@repo/database';
+import { revalidatePath } from 'next/cache';
+
+export async function createLine(projectId: string, name: string) {
+  await db.line.create({
+    data: { name, projectId }
+  });
+  revalidatePath('/');
+}
+
+export async function getLines(projectId: string) {
+  return await db.line.findMany({ where: { projectId } });
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\app\actions\project.ts
+================================================================================
+'use server';
+
+import { db } from '@repo/database'; // L'import magique du Monorepo
+
+export async function getOrCreateDefaultProject() {
+  // On cherche un projet existant ou on en crée un
+  // Dans une vraie app, on utiliserait l'ID de l'utilisateur connecté
+  const project = await db.project.findFirst({
+    where: { name: "Projet Démo" }
+  });
+
+  if (project) return project;
+
+  // Création du user par défaut si besoin (pour la FK)
+  const user = await db.user.upsert({
+    where: { email: "demo@quantum.core" },
+    update: {},
+    create: { email: "demo@quantum.core", name: "Demo User" }
+  });
+
+  return await db.project.create({
+    data: {
+      name: "Projet Démo",
+      domain: "WATER",
+      userId: user.id
+    }
+  });
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\app\actions\sequence.ts
+================================================================================
+'use server';
+
+import { db } from '@repo/database';
+import { revalidatePath } from 'next/cache';
+
+/**
+ * Crée une nouvelle séquence (gamme) pour une ligne donnée.
+ */
+export async function createSequenceAction(lineId: string, name: string, properties: Record<string, any>) {
+  const newSequence = await db.sequence.create({
+    data: {
+      lineId,
+      name,
+      properties,
+    }
+  });
+  revalidatePath('/'); // Revalide la page pour refléter le changement
+  return newSequence;
+}
+
+/**
+ * Met à jour les métadonnées d'une séquence (nom, propriétés).
+ */
+export async function updateSequenceMetaAction(sequenceId: string, data: { name?: string; properties?: any; }) {
+  await db.sequence.update({
+    where: { id: sequenceId },
+    data: {
+      name: data.name,
+      properties: data.properties as any,
+    }
+  });
+  revalidatePath('/');
+}
+
+/**
+ * Met à jour les étapes d'une séquence.
+ */
+export async function updateSequenceStepsAction(sequenceId: string, steps: string[]) {
+  // On supprime les anciennes étapes et on crée les nouvelles en une seule transaction
+  await db.$transaction([
+    db.sequenceStep.deleteMany({ where: { sequenceId } }),
+    db.sequenceStep.createMany({
+      data: steps.map((nodeId, index) => ({
+        sequenceId: sequenceId,
+        nodeId: nodeId,
+        order: index,
+      })),
+    }),
+  ]);
+  revalidatePath('/');
+}
+
+
+/**
+ * Supprime une séquence.
+ */
+export async function deleteSequenceAction(sequenceId: string) {
+  const deletedSequence = await db.sequence.delete({
+    where: { id: sequenceId },
+  });
+  revalidatePath('/');
+  return deletedSequence;
+}
+
+
+================================================================================
+FILE: quantum-core\apps\studio\app\actions\simulation.ts
+================================================================================
+'use server';
+
+type SimulationNode = {
+  id: string;
+  type: string;
+  properties: Record<string, any>;
+};
+
+type SimulationEdge = {
+  source: string;
+  target: string;
+  properties: Record<string, any>;
+};
+
+type SimulationPayload = {
+  domain: string;
+  nodes: SimulationNode[];
+  edges: SimulationEdge[];
+};
+
+/**
+ * Appelle un endpoint du moteur de calcul Python de manière sécurisée et robuste.
+ * @param endpoint L'endpoint à appeler (ex: '/simulate' ou '/generate-proposal').
+ * @param domain Le domaine de la simulation (ex: 'WATER').
+ * @param nodes Les noeuds du graphe (format React Flow).
+ * @param edges Les liens du graphe (format React Flow).
+ * @returns Un objet avec `success`, `data` ou `error`.
+ */
+async function callEngine(endpoint: string, domain: string, nodes: any[], edges: any[]) {
+  const engineUrl = process.env.ENGINE_URL;
+  const secret = process.env.INTERNAL_API_SECRET;
+
+  if (!engineUrl || !secret) {
+    return { success: false, error: "Configuration serveur manquante (URL ou Secret)" };
+  }
+
+  const payload: SimulationPayload = {
+    domain: domain,
+    nodes: nodes.map(n => ({
+      id: n.id,
+      type: n.data.type,
+      properties: n.data.properties || {}
+    })),
+    edges: edges.map(e => ({
+      source: e.source,
+      target: e.target,
+      properties: e.data || {}
+    }))
+  };
+
+  try {
+    const response = await fetch(`${engineUrl}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': secret,
+      },
+      body: JSON.stringify(payload),
+      cache: 'no-store'
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Erreur Engine (${endpoint}):`, response.status, errorText);
+      return { success: false, error: `Erreur Moteur (${response.status})` };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+
+  } catch (error) {
+    console.error(`Erreur de communication avec l'Engine (${endpoint}):`, error);
+    return { success: false, error: "Le moteur de calcul est actuellement injoignable." };
+  }
+}
+
+/**
+ * Action Serveur qui lance une simulation via le moteur de calcul.
+ */
+export async function runSimulationAction(domain: string, nodes: any[], edges: any[]) {
+  console.log(`🚀 Simulation demandée pour le domaine : ${domain}`);
+  const result = await callEngine('/simulate', domain, nodes, edges);
+
+  // Le wrapper peut toujours ajouter de la logique spécifique si besoin
+  // Pour l'instant on retourne directement le résultat.
+  return result;
+}
+
+/**
+ * Action Serveur qui demande une proposition d'amélioration au moteur IA.
+ */
+export async function generateProposalAction(domain: string, nodes: any[], edges: any[]) {
+  const result = await callEngine('/generate-proposal', domain, nodes, edges);
+  
+  // On adapte la structure de retour pour le client si nécessaire
+  if (result.success) {
+    return { success: true, proposal: result.data.proposal };
+  }
+  return result;
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\app\library\page.tsx
+================================================================================
+import { db } from '@repo/database';
+import { getLibrary } from '../actions/library';
+import { getDomainConfig } from '@/lib/registry';
+import { LibraryManager } from '@/components/library/library-manager';
+import { Header } from '@/components/layout/header';
+
+export default async function LibraryPage() {
+  const domainId = process.env.NEXT_PUBLIC_ACTIVE_DOMAIN || "WATER";
+  const config = getDomainConfig();
+  const { baseUnits, referenceItems } = await getLibrary(domainId);
+  
+  // On récupère les lignes juste pour que le Header ne plante pas
+  const project = await db.project.findFirst({ where: { domain: domainId } });
+  const lines = project ? await db.line.findMany({ where: { projectId: project.id } }) : [];
+
+  return (
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-white text-slate-900">
+      
+      {/* RÉUTILISATION DU MÊME HEADER QUE LE STUDIO */}
+      <Header 
+        config={config} 
+        lines={lines} 
+        currentLineId={lines[0]?.id || ""} 
+      />
+
+      {/* ZONE DE CONTENU : On garde le fond gris ardoise du studio */}
+      <main className="flex-1 overflow-hidden bg-slate-50/50 p-6">
+        <div className="h-full bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <LibraryManager 
+                baseUnits={baseUnits} 
+                referenceItems={referenceItems} 
+                domain={domainId} 
+            />
+        </div>
+      </main>
+
+      {/* Indicateur de domaine (même style que le studio) */}
+      <div className="fixed bottom-4 left-4 z-50 pointer-events-none">
+        <div className="bg-white/80 backdrop-blur-sm border border-slate-200 px-2 py-1 rounded-md shadow-sm">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">
+            Quantum Core Library <span className="text-blue-600">v1.0</span> | Mode : {config.id}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\components\canvas\flow-editor.tsx
+================================================================================
+'use client';
+
+import { ReactFlow, Background, Controls, MiniMap } from '@xyflow/react';
+import '@xyflow/react/dist/style.css'; // Import CSS obligatoire
+import { useCanvasStore } from '@/store/canvas-store';
+import { GenericNode } from './generic-node';
+import { useMemo } from 'react';
+
+// On mappe le type interne "genericNode" vers notre composant React visuel
+const nodeTypes = {
+  genericNode: GenericNode,
+};
+
+export function FlowEditor() {
+  const { 
+    nodes, 
+    edges, 
+    onNodesChange, 
+    onEdgesChange, 
+    onConnect 
+  } = useCanvasStore();
+
+  // useMemo pour éviter que ReactFlow ne re-crée les objets à chaque render
+  const memoNodeTypes = useMemo(() => nodeTypes, []);
+
+  return (
+    <div className="flex-1 h-full bg-slate-50">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        nodeTypes={memoNodeTypes}
+        fitView
+      >
+        <Background color="#cbd5e1" gap={20} size={1} />
+        <Controls className="bg-white border-slate-200 shadow-xl" />
+        <MiniMap className="border border-slate-200 rounded-lg shadow-sm" />
+      </ReactFlow>
+    </div>
+  );
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\components\canvas\generic-node.tsx
+================================================================================
+'use client';
+
+import { Handle, Position, NodeProps } from '@xyflow/react';
+import { getDomainConfig } from '@/lib/registry';
+import { DynamicIcon } from '@/components/ui/dynamic-icon';
+import { clsx } from 'clsx';
+
+export function GenericNode({ data, selected }: NodeProps<any>) {
+  // 1. Identification du domaine et de la configuration métier
+  const config = getDomainConfig();
+  const nodeConfig = config.nodeTypes[data.type];
+
+  // Sécurité si le type de noeud n'existe pas dans le manifeste
+  if (!nodeConfig) {
+    return (
+      <div className="p-3 bg-red-50 border-2 border-red-200 rounded-lg text-red-600 text-[10px] font-bold">
+        Type Erreur: {data.type}
+      </div>
+    );
+  }
+
+  // Extraction des propriétés (JSONB) et des résultats de calcul (Simulation)
+  const properties = data.properties || {};
+  const simResults = properties.simulationResults;
+
+  return (
+    <div 
+      className={clsx(
+        "min-w-[180px] rounded-2xl border-2 bg-white transition-all duration-300 shadow-sm",
+        selected 
+          ? "border-slate-900 shadow-2xl ring-4 ring-slate-900/5 scale-105" 
+          : `border-slate-200 hover:border-blue-400`
+      )}
+    >
+      {/* HEADER : Identité visuelle du type d'équipement */}
+      <div className="p-2.5 border-b border-slate-100 flex items-center gap-2 bg-slate-50/50 rounded-t-[14px]">
+        <div className="p-1 bg-white rounded-md border border-slate-200 shadow-sm">
+            <DynamicIcon name={nodeConfig.iconName} className="w-3.5 h-3.5 text-slate-600" />
+        </div>
+        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            {nodeConfig.label}
+        </span>
+      </div>
+
+      {/* CORPS : Informations techniques et Modèle choisi */}
+      <div className="p-4 space-y-3">
+        <div>
+          <p className="text-xs font-bold text-slate-900 leading-none mb-1">
+            {data.label || 'Nouvel élément'}
+          </p>
+
+          {/* Badge de matériel (Provenant du catalogue) */}
+          {properties.catalogName && (
+            <div className="mt-2 py-1 px-2 bg-blue-50 border border-blue-100 rounded-md">
+               <p className="text-[7px] font-black text-blue-400 uppercase leading-none mb-0.5">Spécification</p>
+               <p className="text-[9px] font-bold text-blue-700 truncate leading-tight">
+                 {properties.catalogName}
+               </p>
+            </div>
+          )}
+        </div>
+
+        {/* --- SECTION DYNAMIQUE : RÉSULTATS SCIENTIFIQUES (Engine Output) --- */}
+        {/* Ce bloc n'apparaît que si le moteur Python a renvoyé un calcul */}
+        {simResults && (
+          <div className="pt-3 border-t border-slate-100 animate-in fade-in slide-in-from-top-1 duration-700">
+            <div className="flex justify-between items-end mb-1.5">
+              <span className="text-[8px] font-black text-slate-400 uppercase tracking-tight">Pollution Calc.</span>
+              <span className="text-[11px] font-mono font-bold text-blue-600">
+                {simResults.conc} <span className="text-[9px] font-medium text-slate-400 italic">g/L</span>
+              </span>
+            </div>
+
+            {/* "Health-bar" de pollution : change de couleur selon l'intensité */}
+            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-50 shadow-inner">
+               <div 
+                 className={clsx(
+                    "h-full transition-all duration-1000 ease-in-out",
+                    simResults.conc > 10 ? "bg-orange-500" : "bg-blue-500"
+                 )}
+                 style={{ width: `${Math.min((simResults.conc / 50) * 100, 100)}%` }} 
+               />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* CONNECTEURS (Handles) : Points d'ancrage pour les liens de flux */}
+      <Handle 
+        type="target" 
+        position={Position.Left} 
+        className="w-3 h-3 bg-slate-300 border-2 border-white hover:bg-blue-500 transition-colors !z-10" 
+      />
+      
+      <Handle 
+        type="source" 
+        position={Position.Right} 
+        className="w-3 h-3 bg-slate-300 border-2 border-white hover:bg-blue-500 transition-colors !z-10" 
+      />
+    </div>
+  );
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\components\layout\catalog-selector.tsx
+================================================================================
+'use client';
+
+import { useState, useEffect } from 'react';
+import { getCatalogItems } from '@/app/actions/catalog';
+import { ShoppingBag, Check } from 'lucide-react';
+import { useCanvasStore } from '@/store/canvas-store';
+
+export function CatalogSelector({ category, nodeId }: { category: string, nodeId: string }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const updateNodeProperties = useCanvasStore(state => state.updateNodeProperties);
+
+  useEffect(() => {
+    if (isOpen) getCatalogItems(category).then(setItems);
+  }, [isOpen, category]);
+
+  const handleSelect = (item: any) => {
+    // On injecte les specs du catalogue + le nom de l'équipement dans le noeud
+    updateNodeProperties(nodeId, { 
+      ...item.specs, 
+      catalogName: item.name,
+      price: item.specs.price || 0 
+    });
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative mt-4">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-center gap-2 p-2 text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-200"
+      >
+        <ShoppingBag className="w-3 h-3" />
+        Catalogue {category}s
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-20 top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl p-2 max-h-60 overflow-y-auto">
+          {items.map(item => (
+            <div 
+              key={item.id}
+              onClick={() => handleSelect(item)}
+              className="p-3 hover:bg-blue-50 rounded-lg cursor-pointer border border-transparent hover:border-blue-100 transition-all group"
+            >
+              <div className="flex justify-between items-start">
+                <p className="text-xs font-bold text-slate-700 group-hover:text-blue-700">{item.name}</p>
+                <Check className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100" />
+              </div>
+              <p className="text-[9px] text-slate-400 mt-1">
+                Prix : {item.specs.price} € | Specs : {JSON.stringify(item.specs)}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\components\layout\header.tsx
+================================================================================
+'use client';
+
+import { useCanvasStore } from '@/store/canvas-store';
+import { saveGraph } from '@/app/actions/graph';
+import { runSimulationAction, generateProposalAction } from '@/app/actions/simulation';
+import { seedCatalog } from '@/app/actions/catalog';
+import { useState } from 'react';
+import { 
+  Save, 
+  Loader2, 
+  Play, 
+  BarChart3, 
+  X, 
+  FileText, 
+  Sparkles, 
+  Database,
+  LayoutDashboard,
+  FlaskConical
+} from 'lucide-react';
+import { LineSelector } from './line-selector';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
+
+interface HeaderProps {
+  config: any;
+  lines: any[];
+  currentLineId: string;
+}
+
+export function Header({ config, lines, currentLineId }: HeaderProps) {
+  const pathname = usePathname();
+  const isLibrary = pathname.includes('/library');
+  
+  const store = useCanvasStore();
+  const { nodes, edges } = store;
+  
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  
+  const [results, setResults] = useState<any>(null);
+  const [proposal, setProposal] = useState<string | null>(null);
+
+  // --- LOGIQUE IA ---
+  const handleGenerateOffer = async () => {
+    setIsGenerating(true);
+    const res = await generateProposalAction(config.id, nodes, edges);
+    if (res.success) setProposal(res.proposal);
+    else alert("Erreur IA : " + res.error);
+    setIsGenerating(false);
+  };
+
+  // --- LOGIQUE SAUVEGARDE ---
+  const handleSave = async () => {
+    if (!currentLineId) return alert("Aucune ligne active");
+    setIsSaving(true);
+    const cleanNodes = nodes.map(n => ({ id: n.id, position: n.position, data: n.data }));
+    const result = await saveGraph(currentLineId, { nodes: cleanNodes, edges });
+    setIsSaving(false);
+    if (result.success) alert("Ligne sauvegardée avec succès !");
+  };
+
+  // --- LOGIQUE SIMULATION ---
+  const handleSimulate = async () => {
+    setIsSimulating(true);
+    const response = await runSimulationAction(config.id, nodes, edges);
+    setIsSimulating(false);
+
+    if (response.success) {
+      setResults(response.data);
+      const details = response.data.node_details;
+      if (details) {
+        Object.keys(details).forEach(nodeId => {
+          store.updateNodeProperties(nodeId, { simulationResults: details[nodeId] });
+        });
+      }
+    }
+  };
+
+  return (
+    <>
+      <header className="h-14 border-b border-slate-200 flex items-center justify-between px-6 bg-white shrink-0 z-10 shadow-sm">
+        <div className="flex items-center gap-8">
+          {/* Logo & Titre */}
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white font-bold shadow-lg">QC</div>
+            <div className="hidden lg:block">
+              <h1 className="text-sm font-bold leading-none text-slate-900">Quantum Core</h1>
+              <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter mt-0.5">Engineering OS</p>
+            </div>
+          </div>
+
+          {/* Navigation principale */}
+          <nav className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <Link 
+              href="/" 
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!isLibrary ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <LayoutDashboard className="w-3 h-3" /> Conception
+            </Link>
+            <Link 
+              href="/library" 
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${isLibrary ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <FlaskConical className="w-3 h-3" /> Bibliothèque
+            </Link>
+          </nav>
+
+          {/* Sélecteur de Ligne - Uniquement visible en mode Conception */}
+          {!isLibrary && lines.length > 0 && (
+            <div className="h-8 w-px bg-slate-200 mx-2" />
+          )}
+          {!isLibrary && (
+            <LineSelector lines={lines} currentLineId={currentLineId} />
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Outils Admin (Toujours visibles ou restreints au rôle ADMIN plus tard) */}
+          <button 
+            onClick={() => seedCatalog().then(() => alert("Base initialisée"))}
+            className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-all"
+            title="Initialiser le catalogue"
+          >
+            <Database className="w-4 h-4" />
+          </button>
+
+          <div className="w-px h-6 bg-slate-100" />
+
+          {/* Actions de Conception - Uniquement si PAS sur la page Library */}
+          {!isLibrary ? (
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={handleGenerateOffer} 
+                disabled={isGenerating || nodes.length === 0}
+                className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-purple-600 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 disabled:opacity-30 transition-all"
+              >
+                {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                Rédiger l'Offre
+              </button>
+
+              <button 
+                onClick={handleSimulate} 
+                disabled={isSimulating || nodes.length === 0}
+                className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 disabled:opacity-30 transition-all shadow-sm"
+              >
+                {isSimulating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3 fill-current" />}
+                Simuler
+              </button>
+
+              <button 
+                onClick={handleSave} 
+                disabled={isSaving}
+                className="flex items-center gap-2 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-white bg-slate-900 rounded-xl hover:bg-black disabled:opacity-30 transition-all shadow-lg shadow-slate-200"
+              >
+                {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                Sauvegarder
+              </button>
+            </div>
+          ) : (
+            <div className="px-4 py-2 bg-blue-50 border border-blue-100 rounded-xl text-[10px] font-black text-blue-600 uppercase tracking-widest">
+              Mode Gestion de Référentiel
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* --- OVERLAY : OFFRE IA --- */}
+      {proposal && (
+        <div className="fixed inset-y-0 right-0 w-[500px] bg-white shadow-2xl z-[60] border-l border-slate-200 animate-in slide-in-from-right duration-500 p-10 overflow-y-auto">
+          <div className="flex justify-between items-center mb-8">
+            <div className="flex items-center gap-3">
+               <div className="p-2 bg-purple-100 rounded-lg text-purple-600">
+                  <FileText className="w-5 h-5" />
+               </div>
+               <h2 className="text-xl font-bold text-slate-900 tracking-tight">Proposition Technique IA</h2>
+            </div>
+            <button onClick={() => setProposal(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
+                <X className="w-6 h-6" />
+            </button>
+          </div>
+          
+          <div className="prose prose-slate prose-sm text-slate-600 leading-relaxed">
+            {proposal.split('\n').map((line, i) => (
+              <p key={i} className={line.startsWith('###') ? "text-lg font-bold text-slate-900 border-b pb-2 mb-4 mt-8" : ""}>
+                {line.replace('###', '')}
+              </p>
+            ))}
+          </div>
+
+          <button className="w-full mt-12 bg-slate-900 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-black transition-all shadow-xl">
+            Générer le document PDF
+          </button>
+        </div>
+      )}
+
+      {/* --- OVERLAY : ANALYSE ENGINE --- */}
+      {results && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-3xl px-6 animate-in slide-in-from-bottom-12 duration-700">
+          <div className="bg-white border-2 border-slate-900 rounded-3xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)] overflow-hidden ring-8 ring-slate-900/5">
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center px-8">
+               <div className="flex items-center gap-3 font-bold text-[10px] uppercase tracking-[0.2em]">
+                  <BarChart3 className="w-4 h-4 text-blue-400" /> Performance & Dimensionnement
+               </div>
+               <button onClick={() => setResults(null)} className="p-1 hover:bg-white/10 rounded-full transition-colors">
+                  <X className="w-5 h-5 text-slate-400" />
+               </button>
+            </div>
+            
+            <div className="p-8 grid grid-cols-3 gap-6 bg-white">
+               {results.kpis?.map((kpi: any, i: number) => (
+                 <div key={i} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col items-center text-center group hover:bg-white hover:border-blue-200 transition-all">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-blue-400">{kpi.label}</p>
+                    <p className={`text-2xl font-black ${kpi.color || 'text-slate-900'}`}>
+                        {kpi.value} <span className="text-xs font-bold text-slate-400 ml-1">{kpi.unit}</span>
+                    </p>
+                 </div>
+               ))}
+            </div>
+
+            {results.warnings?.length > 0 && (
+              <div className="px-8 pb-8">
+                <div className="p-5 bg-orange-50 border border-orange-100 rounded-2xl">
+                   <div className="flex items-center gap-2 text-orange-700 font-black text-[10px] uppercase tracking-widest mb-3">
+                      ⚠️ Alertes Ingénierie
+                   </div>
+                   <ul className="space-y-2">
+                      {results.warnings.map((w: string, i: number) => (
+                        <li key={i} className="text-xs text-orange-800 leading-tight flex gap-3">
+                          <span className="shrink-0 text-orange-300">●</span> {w}
+                        </li>
+                      ))}
+                   </ul>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\components\layout\line-selector.tsx
+================================================================================
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { LayoutDashboard, ChevronDown } from 'lucide-react';
+
+interface LineSelectorProps {
+  lines: any[];
+  currentLineId: string;
+}
+
+export function LineSelector({ lines, currentLineId }: LineSelectorProps) {
+  const router = useRouter();
+
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    // On change l'URL pour charger la nouvelle ligne
+    router.push(`?lineId=${e.target.value}`);
+  };
+
+  return (
+    <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer group">
+      <LayoutDashboard className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 transition-colors" />
+      
+      <div className="relative flex items-center">
+        <select 
+          value={currentLineId}
+          onChange={handleChange}
+          className="appearance-none bg-transparent pr-5 text-[10px] font-black uppercase tracking-widest text-slate-600 outline-none cursor-pointer"
+        >
+          {lines.map((line) => (
+            <option key={line.id} value={line.id}>
+              {line.name}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="w-3 h-3 text-slate-400 absolute right-0 pointer-events-none" />
+      </div>
+    </div>
+  );
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\components\layout\node-palette.tsx
+================================================================================
+'use client';
+
+import { useCanvasStore } from '@/store/canvas-store';
+import { Plus } from 'lucide-react';
+import { DynamicIcon } from '@/components/ui/dynamic-icon';
+
+interface NodePaletteProps {
+  config: any;
+}
+
+export function NodePalette({ config }: NodePaletteProps) {
+  const addNode = useCanvasStore((state) => state.addNode);
+
+  // On récupère la liste des types définis dans le manifeste du domaine
+  const nodeTypes = Object.values(config.nodeTypes || {});
+
+  return (
+    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col h-full shrink-0">
+      <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+        <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+          Bibliothèque {config.name}
+        </h2>
+      </div>
+      
+      <div className="p-4 space-y-3 overflow-y-auto flex-1">
+        {nodeTypes.map((node: any) => (
+          <button
+            key={node.id}
+            onClick={() => addNode(node.id, { x: Math.random() * 200, y: Math.random() * 200 })}
+            className="group flex items-center w-full gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:border-blue-400 hover:shadow-lg hover:shadow-blue-500/5 transition-all text-left"
+          >
+            {/* Icône dynamique basée sur le nom dans la config */}
+            <div className={`p-2 rounded-lg bg-slate-50 border border-slate-100 text-slate-500 group-hover:text-blue-600 group-hover:bg-blue-50 group-hover:border-blue-100 transition-colors`}>
+              <DynamicIcon name={node.iconName} className="w-5 h-5" />
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-slate-700 truncate group-hover:text-blue-700">
+                {node.label}
+              </p>
+              {node.description && (
+                <p className="text-[10px] text-slate-400 line-clamp-1 italic">
+                  {node.description}
+                </p>
+              )}
+            </div>
+            
+            <Plus className="w-4 h-4 text-slate-300 group-hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all" />
+          </button>
+        ))}
+
+        {nodeTypes.length === 0 && (
+          <p className="text-xs text-center text-slate-400 py-10">
+            Aucun équipement configuré.
+          </p>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\components\layout\project-initializer.tsx
+================================================================================
+'use client';
+
+import { useEffect } from 'react';
+import { useCanvasStore } from '@/store/canvas-store';
+
+export function ProjectInitializer({ 
+  projectId, 
+  lineId, 
+  initialNodes, 
+  initialEdges, 
+  initialSequences 
+}: any) {
+  // On ne sélectionne que les actions. Zustand garantit que leur référence est stable.
+  const { 
+    setProjectId, 
+    setLineId, 
+    setGraph, 
+    setSequences, 
+    setSelectedNodeId, 
+    setSelectedEdgeId 
+  } = useCanvasStore();
+
+  useEffect(() => {
+    setProjectId(projectId);
+    setLineId(lineId);
+    setGraph(initialNodes, initialEdges);
+    setSequences(initialSequences || []);
+    
+    // On nettoie la sélection au changement de ligne
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+  }, [
+    // La liste des dépendances contient maintenant des valeurs primitives (IDs)
+    // ou des références stables (fonctions Zustand et objets/tableaux du serveur)
+    projectId, 
+    lineId, 
+    initialNodes, 
+    initialEdges, 
+    initialSequences, 
+    setProjectId, 
+    setLineId, 
+    setGraph, 
+    setSequences, 
+    setSelectedNodeId, 
+    setSelectedEdgeId
+  ]);
+
+  return null;
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\components\layout\properties-panel.tsx
+================================================================================
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useCanvasStore } from '@/store/canvas-store';
+import { 
+  Settings2, 
+  Info, 
+  GitCommitVertical, 
+  Plus, 
+  Trash2, 
+  FlaskConical, 
+  Target 
+} from 'lucide-react';
+import { CatalogSelector } from './catalog-selector';
+import { DynamicIcon } from '@/components/ui/dynamic-icon';
+import { getLibrary } from '@/app/actions/library'; // Assurez-vous que cette action existe
+
+// ===================================
+// Helper: Render a single form field
+// ===================================
+type FieldProps = {
+  field: any;
+  properties: any;
+  update: (props: any) => void;
+};
+
+function PropertyField({ field, properties, update }: FieldProps) {
+  const value = properties[field.id] ?? field.default ?? '';
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const val = field.type === 'number' ? parseFloat(e.target.value) : e.target.value;
+    update({ [field.id]: val });
+  };
+
+  if (field.type === 'select') {
+    return (
+      <select
+        value={value}
+        onChange={handleChange}
+        className="w-full p-2 text-sm border border-slate-200 rounded-md bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+      >
+        {field.options?.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      type={field.type === 'number' ? 'number' : 'text'}
+      value={value}
+      onChange={handleChange}
+      className="w-full p-2 text-sm border border-slate-200 rounded-md bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium"
+    />
+  );
+}
+
+// ===================================
+// Main Panel Component
+// ===================================
+interface PropertiesPanelProps {
+  config: any;
+}
+
+export function PropertiesPanel({ config }: PropertiesPanelProps) {
+  const store = useCanvasStore();
+  const [library, setLibrary] = useState<{ baseUnits: any[], referenceItems: any[] }>({ baseUnits: [], referenceItems: [] });
+  const [isAddingComponent, setIsAddingComponent] = useState(false);
+
+  const selectedNode = store.nodes.find((n) => n.id === store.selectedNodeId);
+  const selectedEdge = store.edges.find((e) => e.id === store.selectedEdgeId);
+  const isNode = !!selectedNode;
+
+  // Charger la bibliothèque au besoin
+  useEffect(() => {
+    if (isNode && selectedNode.data.type === "TANK") {
+      getLibrary(config.id).then(setLibrary);
+    }
+  }, [isNode, selectedNode?.id, config.id]);
+
+  if (!selectedNode && !selectedEdge) {
+    return (
+      <aside className="w-80 border-l border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+          <Settings2 className="w-6 h-6 text-slate-400" />
+        </div>
+        <p className="text-sm font-medium text-slate-500 uppercase tracking-tight">
+          Sélectionnez un équipement ou une liaison pour modifier ses propriétés.
+        </p>
+      </aside>
+    );
+  }
+
+  let itemConfig: any, properties: any, update: any, title: string, icon: any;
+  
+  if (selectedNode) {
+    itemConfig = config.nodeTypes[selectedNode.data.type];
+    properties = selectedNode.data.properties || {};
+    update = (props: any) => store.updateNodeProperties(selectedNode.id, props);
+    title = itemConfig.label;
+    icon = <DynamicIcon name={itemConfig.iconName} className={`w-4 h-4 text-${itemConfig.color}`} />;
+  } else if (selectedEdge) {
+    const edgeType = selectedEdge.type?.toUpperCase() === 'DEFAULT' ? 'PIPE' : (selectedEdge.type || 'PIPE');
+    itemConfig = config.edgeTypes[edgeType];
+    properties = selectedEdge.data || {};
+    update = (props: any) => store.updateEdgeProperties(selectedEdge.id, props);
+    title = itemConfig?.label || "Liaison";
+    icon = <GitCommitVertical className={`w-4 h-4 text-slate-400`} />;
+  }
+
+  // --- LOGIQUE COMPOSANTS CHIMIQUES ---
+  const nodeComponents = properties.components || [];
+
+  const addComponent = (itemId: string) => {
+    const item = library.referenceItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    const newComponent = {
+      id: crypto.randomUUID(),
+      referenceItemId: item.id,
+      name: item.name,
+      value: 0,
+      targetType: 'ARTICLE', // Par défaut cible le produit
+      targetBaseUnitId: null
+    };
+
+    update({ components: [...nodeComponents, newComponent] });
+    setIsAddingComponent(false);
+  };
+
+  const removeComponent = (id: string) => {
+    update({ components: nodeComponents.filter((c: any) => c.id !== id) });
+  };
+
+  const updateComponent = (id: string, data: any) => {
+    update({
+      components: nodeComponents.map((c: any) => c.id === id ? { ...c, ...data } : c)
+    });
+  };
+
+  return (
+    <aside className="w-80 border-l border-slate-200 bg-white flex flex-col h-full shadow-sm overflow-y-auto">
+      <div className="p-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+        <div className="flex items-center gap-2 mb-1">
+          {icon}
+          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            Propriétés {isNode ? 'Équipement' : 'Flux'}
+          </h2>
+        </div>
+        <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+      </div>
+
+      <div className="p-6 space-y-6">
+        {isNode && (
+          <>
+            <CatalogSelector category={selectedNode.data.type} nodeId={selectedNode.id} />
+
+            {properties.catalogName && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg animate-in fade-in zoom-in-95">
+                <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">Modèle Catalogue</p>
+                <p className="text-sm font-bold text-blue-900 leading-tight">{properties.catalogName}</p>
+                <button 
+                    onClick={() => update({ catalogName: null, price: 0 })}
+                    className="mt-2 text-[10px] text-blue-500 hover:underline font-medium"
+                >
+                    Réinitialiser la sélection
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {isNode && <div className="h-px bg-slate-100 my-4" />}
+
+        {/* --- SECTION 1 : CHAMPS STATIQUES DU MANIFESTE --- */}
+        <div className="space-y-5">
+            {itemConfig?.fields?.map((field: any) => (
+              <div key={field.id} className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase flex justify-between">
+                  {field.label}
+                  {field.unit && <span className="text-blue-500 lowercase font-medium">{field.unit}</span>}
+                </label>
+                <PropertyField field={field} properties={properties} update={update} />
+              </div>
+            ))}
+        </div>
+
+        {/* --- SECTION 2 : COMPOSITION CHIMIQUE (TANK/PROCESS ONLY) --- */}
+        {isNode && itemConfig.id === "TANK" && (
+          <div className="mt-8 border-t pt-6 space-y-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <FlaskConical className="w-3.5 h-3.5 text-purple-500" />
+                <h4 className="text-[10px] font-black uppercase text-slate-400">Composition</h4>
+              </div>
+              <button 
+                onClick={() => setIsAddingComponent(true)}
+                className="p-1 rounded-md bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Liste des produits ajoutés */}
+            <div className="space-y-3">
+              {nodeComponents.map((comp: any) => {
+                const refItem = library.referenceItems.find(i => i.id === comp.referenceItemId);
+                return (
+                  <div key={comp.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                    <div className="flex justify-between items-start">
+                      <p className="text-[11px] font-bold text-slate-700">{comp.name}</p>
+                      <button onClick={() => removeComponent(comp.id)}>
+                        <Trash2 className="w-3 h-3 text-slate-300 hover:text-red-500" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[8px] font-bold text-slate-400 uppercase">Cible</label>
+                        <select 
+                          value={comp.targetType}
+                          onChange={(e) => updateComponent(comp.id, { targetType: e.target.value, targetBaseUnitId: null })}
+                          className="w-full p-1 text-[10px] border rounded bg-white outline-none"
+                        >
+                          <option value="ARTICLE">Produit</option>
+                          <option value="UNIT">Ion spécifique</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[8px] font-bold text-slate-400 uppercase">Valeur (g/L)</label>
+                        <input 
+                          type="number"
+                          value={comp.value}
+                          onChange={(e) => updateComponent(comp.id, { value: parseFloat(e.target.value) })}
+                          className="w-full p-1 text-[10px] border rounded bg-white font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Si on cible un Ion, on affiche le sélecteur d'Ions présents dans ce produit */}
+                    {comp.targetType === 'UNIT' && refItem && (
+                      <div className="space-y-1 animate-in slide-in-from-top-1">
+                         <label className="text-[8px] font-bold text-purple-500 uppercase flex items-center gap-1">
+                           <Target className="w-2 h-2" /> Ion à réguler
+                         </label>
+                         <select 
+                           value={comp.targetBaseUnitId || ''}
+                           onChange={(e) => updateComponent(comp.id, { targetBaseUnitId: e.target.value })}
+                           className="w-full p-1 text-[10px] border border-purple-100 rounded bg-purple-50/30 outline-none"
+                         >
+                           <option value="">Sélectionner l'Ion...</option>
+                           {refItem.composition.map((c: any) => (
+                             <option key={c.baseUnit.id} value={c.baseUnit.id}>
+                               {c.baseUnit.symbol} ({c.baseUnit.name})
+                             </option>
+                           ))}
+                         </select>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Menu de sélection de produit */}
+            {isAddingComponent && (
+              <div className="p-4 bg-purple-50 border-2 border-purple-100 rounded-xl animate-in zoom-in-95 duration-200">
+                <p className="text-[9px] font-black text-purple-400 uppercase mb-2">Choisir un produit</p>
+                <select 
+                  className="w-full p-2 text-xs border rounded-lg bg-white mb-3"
+                  onChange={(e) => addComponent(e.target.value)}
+                  defaultValue=""
+                >
+                  <option value="" disabled>--- Sélectionner ---</option>
+                  {library.referenceItems.map(item => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+                <button 
+                  onClick={() => setIsAddingComponent(false)}
+                  className="w-full text-[10px] text-slate-400 font-bold uppercase hover:text-slate-600"
+                >
+                  Annuler
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-100 flex gap-3">
+          <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-blue-700 leading-relaxed italic">
+            Les modifications sont enregistrées localement. Cliquez sur <strong>Sauvegarder</strong> pour persister en base.
+          </p>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\components\layout\sequence-manager.tsx
+================================================================================
+'use client';
+
+import { useCanvasStore } from '@/store/canvas-store';
+import { Layers, Plus, Trash2, ArrowRight, PlayCircle } from 'lucide-react';
+import { useState } from 'react';
+
+export function SequenceManager() {
+  const { 
+    nodes, 
+    sequences, 
+    addSequence, 
+    updateSequenceMeta, 
+    updateSequenceSteps, 
+    removeSequence, 
+    selectedSequenceId, 
+    setSelectedSequenceId 
+  } = useCanvasStore();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const activeSeq = sequences.find(s => s.id === selectedSequenceId);
+
+  const addStep = (nodeId: string) => {
+    if (!activeSeq || !nodeId) return;
+    const newSteps = [...activeSeq.steps, nodeId];
+    updateSequenceSteps(activeSeq.id, newSteps);
+  };
+
+  const removeStep = (indexToRemove: number) => {
+    if (!activeSeq) return;
+    const newSteps = activeSeq.steps.filter((_, i) => i !== indexToRemove);
+    updateSequenceSteps(activeSeq.id, newSteps);
+  };
+
+  return (
+    <div className={`fixed bottom-0 left-64 right-80 bg-white border-t border-slate-200 transition-all duration-500 z-40 ${isOpen ? 'h-64' : 'h-10'}`}>
+      {/* Barre de titre / Toggle */}
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className="h-10 flex items-center justify-between px-6 cursor-pointer hover:bg-slate-50 border-b border-slate-100"
+      >
+        <div className="flex items-center gap-2">
+            <Layers className="w-3.5 h-3.5 text-blue-600" />
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Gestion des Gammes de Production</span>
+            <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[9px] font-bold">{sequences.length}</span>
+        </div>
+        <button className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{isOpen ? 'Réduire' : 'Ouvrir'}</button>
+      </div>
+
+      {isOpen && (
+        <div className="flex h-54 divide-x divide-slate-100">
+          {/* Liste des Gammes */}
+          <div className="w-64 p-4 overflow-y-auto space-y-2">
+            <button 
+                onClick={() => addSequence(`Gamme ${sequences.length + 1}`)}
+                className="w-full p-2 border-2 border-dashed border-slate-200 rounded-xl text-[9px] font-bold text-slate-400 hover:border-blue-400 hover:text-blue-600 transition-all"
+            >
+                + NOUVELLE GAMME
+            </button>
+            {sequences.map(s => (
+              <div 
+                key={s.id} 
+                onClick={() => setSelectedSequenceId(s.id)}
+                className={`p-3 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${selectedSequenceId === s.id ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-600 hover:bg-white'}`}
+              >
+                <span className="text-xs font-bold truncate">{s.name}</span>
+                <div className="flex items-center gap-2">
+                    {selectedSequenceId === s.id && <PlayCircle className="w-4 h-4" />}
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); removeSequence(s.id); }}
+                      className={`p-1 rounded-full ${selectedSequenceId === s.id ? 'hover:bg-blue-500' : 'hover:bg-slate-200'}`}
+                    >
+                      <Trash2 className={`w-3 h-3 ${selectedSequenceId === s.id ? 'text-white' : 'text-slate-400'}`} />
+                    </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+                     {/* Constructeur de Séquence */}
+                    <div className="flex-1 p-6 overflow-x-auto">
+                      {activeSeq ? (
+                        <div className="space-y-6">
+                          <div className="flex items-center gap-4">
+                              <input 
+                                  className="text-lg font-black bg-transparent outline-none border-b-2 border-transparent focus:border-blue-200"
+                                  value={activeSeq.name}
+                                  onChange={(e) => updateSequenceMeta(activeSeq.id, { name: e.target.value })}
+                              />
+                              <div className="flex items-center gap-4 bg-slate-50 p-1.5 rounded-lg border">
+                                  {/* Cadence */}
+                                  <div className="flex items-center gap-2 p-1">
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase px-2">Cadence:</span>
+                                      <input type="number" className="w-16 bg-white border rounded px-1 text-xs font-bold" value={activeSeq.properties.cadence} onChange={e => updateSequenceMeta(activeSeq.id, { properties: { ...activeSeq.properties, cadence: parseFloat(e.target.value) } })} />
+                                      <span className="text-[9px] font-bold text-slate-400">m²/h</span>
+                                  </div>
+                                  <div className="h-6 border-l border-slate-200" />
+                                  {/* Entraînement / Drag-out */}
+                                  <div className="flex items-center gap-2 p-1">
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase px-2">Entraînement:</span>
+                                      <input type="number" step="0.01" className="w-16 bg-white border rounded px-1 text-xs font-bold" value={activeSeq.properties.dragOut} onChange={e => updateSequenceMeta(activeSeq.id, { properties: { ...activeSeq.properties, dragOut: parseFloat(e.target.value) } })} />
+                                      <span className="text-[9px] font-bold text-slate-400">L/m²</span>
+                                  </div>
+                              </div>
+                          </div>
+          
+                          <div className="flex items-center gap-3">                  {activeSeq.steps.map((stepId, idx) => {
+                    const node = nodes.find(n => n.id === stepId);
+                    return (
+                      <div key={idx} className="flex items-center gap-3 group">
+                        <div className="bg-white border-2 border-blue-500 p-3 rounded-2xl shadow-md min-w-[100px] relative">
+                           <p className="text-[8px] font-black text-blue-500 uppercase mb-1">Étape {idx + 1}</p>
+                           <p className="text-xs font-bold text-slate-800 truncate">{node?.data.label || 'Node supprimé'}</p>
+                           <button 
+                             onClick={() => removeStep(idx)}
+                             className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                           >
+                             <Trash2 className="w-3 h-3" />
+                           </button>
+                        </div>
+                        {idx < activeSeq.steps.length - 1 && <ArrowRight className="w-4 h-4 text-slate-300" />}
+                      </div>
+                    );
+                  })}
+                  
+                  {/* Sélecteur pour ajouter une étape */}
+                  <select 
+                    className="ml-4 p-3 border-2 border-dashed border-slate-200 rounded-2xl text-[10px] font-bold text-slate-400 outline-none hover:border-blue-400 transition-all bg-transparent"
+                    onChange={(e) => addStep(e.target.value)}
+                    value=""
+                  >
+                    <option value="">+ AJOUTER ÉTAPE</option>
+                    {nodes.filter(n => n.data.role === "PROCESS").map(n => (
+                        <option key={n.id} value={n.id}>{n.data.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-300 italic text-sm">
+                Sélectionnez une gamme pour éditer le cheminement des pièces.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+================================================================================
+FILE: quantum-core\apps\studio\components\library\library-manager.tsx
+================================================================================
+'use client';
+
+import { useState } from 'react';
+import { 
+  Atom, 
+  Beaker, 
+  Upload, 
+  Plus, 
+  Trash2, 
+  Save, 
+  ChevronRight, 
+  Database,
+  Search,
+  CheckCircle2
+} from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  importLibraryJson, 
+  upsertReferenceItem 
+} from '@/app/actions/library';
+
+interface LibraryManagerProps {
+  baseUnits: any[];
+  referenceItems: any[];
+  domain: string;
+}
+
+export function LibraryManager({ baseUnits, referenceItems, domain }: LibraryManagerProps) {
+  const [activeTab, setActiveTab] = useState('units');
+  const [isImporting, setIsImporting] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const content = JSON.parse(event.target?.result as string);
+        const res = await importLibraryJson(domain, content);
+        if (res.success) alert("Importation réussie !");
+        else alert("Erreur : " + res.error);
+      } catch (err) {
+        alert("Fichier JSON invalide.");
+      } finally {
+        setIsImporting(false);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  return (
+    // ON ENVELOPPE TOUT DANS <Tabs>
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full space-y-6">
+      
+      {/* BARRE D'OUTILS SUPÉRIEURE */}
+      <div className="flex justify-between items-center">
+        <TabsList className="bg-slate-100 p-1 rounded-xl border">
+          <TabsTrigger value="units" className="flex gap-2 text-xs font-bold uppercase tracking-wider">
+            <Atom className="w-3.5 h-3.5" /> Unités (Ions)
+          </TabsTrigger>
+          <TabsTrigger value="items" className="flex gap-2 text-xs font-bold uppercase tracking-wider">
+            <Beaker className="w-3.5 h-3.5" /> Articles (Produits)
+          </TabsTrigger>
+        </TabsList>
+
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-blue-600 transition-all shadow-lg shadow-slate-200">
+            {isImporting ? <Database className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            Importer JSON
+            <input type="file" className="hidden" accept=".json" onChange={handleFileUpload} disabled={isImporting} />
+          </label>
+        </div>
+      </div>
+
+      {/* CONTENU DES ONGLETS */}
+      <div className="flex-1 bg-slate-50/50 rounded-3xl border border-slate-200 overflow-hidden shadow-inner">
+        <TabsContent value="units" className="h-full m-0 p-8 overflow-y-auto outline-none">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex justify-between items-end">
+                <div>
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tighter">Référentiel des Unités</h2>
+                    <p className="text-sm text-slate-500 italic">Définissez les briques élémentaires (ex: Masse Molaire, Charge)</p>
+                </div>
+                <button className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold bg-white border border-slate-200 rounded-lg hover:border-blue-400 transition-all shadow-sm">
+                    <Plus className="w-3 h-3 text-blue-500" /> Ajouter Unité
+                </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {baseUnits.map((unit: any) => (
+                <div key={unit.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="p-2 bg-slate-50 rounded-lg font-mono font-bold text-blue-600 border border-slate-100">
+                        {unit.symbol || '??'}
+                    </div>
+                    <span className="text-[10px] font-black text-slate-300 group-hover:text-blue-200">#{unit.id.slice(0,4)}</span>
+                  </div>
+                  <h4 className="font-bold text-slate-800">{unit.name}</h4>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {Object.entries(unit.properties || {}).map(([k, v]: any) => (
+                        <span key={k} className="px-2 py-0.5 bg-slate-50 rounded-md text-[9px] font-medium text-slate-500 border border-slate-100 uppercase">
+                            {k}: {v}
+                        </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="items" className="h-full m-0 overflow-hidden outline-none">
+           <ReferenceItemEditor 
+             items={referenceItems} 
+             baseUnits={baseUnits} 
+             domain={domain} 
+           />
+        </TabsContent>
+      </div>
+
+    </Tabs> // FIN DU WRAPPER TABS
+  );
+}
+
+// ... Le reste du fichier (ReferenceItemEditor) reste identique
+function ReferenceItemEditor({ items, baseUnits, domain }: any) {
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [composition, setComposition] = useState<any[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSelect = (item: any) => {
+    setSelectedItem(item);
+    setComposition(item.composition || []);
+  };
+
+  const addCompositionLine = () => {
+    setComposition([...composition, { baseUnitId: '', coefficient: 1 }]);
+  };
+
+  const updateCompositionLine = (index: number, data: any) => {
+    const newComp = [...composition];
+    newComp[index] = { ...newComp[index], ...data };
+    setComposition(newComp);
+  };
+
+  const removeCompositionLine = (index: number) => {
+    setComposition(composition.filter((_, i) => i !== index));
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    await upsertReferenceItem(domain, {
+        ...selectedItem,
+        composition: composition
+    });
+    setIsSaving(false);
+    alert("Article mis à jour !");
+  };
+
+  return (
+    <div className="flex h-full divide-x divide-slate-200">
+      {/* LISTE DE GAUCHE */}
+      <div className="w-1/3 flex flex-col bg-white overflow-hidden">
+        <div className="p-4 bg-slate-50/50 border-b flex items-center gap-2">
+            <Search className="w-3.5 h-3.5 text-slate-400" />
+            <input className="bg-transparent text-xs outline-none w-full italic" placeholder="Rechercher un produit..." />
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {items.map((item: any) => (
+            <div 
+              key={item.id}
+              onClick={() => handleSelect(item)}
+              className={`p-5 border-b border-slate-100 cursor-pointer transition-all hover:bg-slate-50 flex justify-between items-center group ${selectedItem?.id === item.id ? 'bg-blue-50/50 border-l-4 border-l-blue-600' : ''}`}
+            >
+              <div>
+                <p className={`text-sm font-bold ${selectedItem?.id === item.id ? 'text-blue-900' : 'text-slate-700'}`}>
+                    {item.name}
+                </p>
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-1">
+                    {item.composition?.length || 0} Unités liées
+                </p>
+              </div>
+              <ChevronRight className={`w-4 h-4 text-slate-300 transition-transform ${selectedItem?.id === item.id ? 'translate-x-1 text-blue-500' : 'group-hover:translate-x-1'}`} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* FORMULAIRE DE DROITE */}
+      <div className="flex-1 bg-white overflow-y-auto">
+        {selectedItem ? (
+          <div className="p-10 max-w-2xl mx-auto space-y-10">
+            <div className="flex justify-between items-start">
+               <div>
+                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">{selectedItem.name}</h3>
+                  <p className="text-xs text-slate-400 uppercase font-black tracking-widest mt-1">Domaine : {domain}</p>
+               </div>
+               <button 
+                 onClick={handleSave}
+                 disabled={isSaving}
+                 className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg shadow-blue-100"
+               >
+                 {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                 Enregistrer
+               </button>
+            </div>
+
+            {/* Propriétés */}
+            <div className="grid grid-cols-2 gap-6 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+               {Object.entries(selectedItem.properties || {}).map(([key, value]: any) => (
+                 <div key={key} className="space-y-1.5">
+                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{key}</label>
+                   <input 
+                     className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm font-bold" 
+                     defaultValue={value} 
+                   />
+                 </div>
+               ))}
+            </div>
+
+            {/* Composition */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Composition / Dissociation</h4>
+                <button 
+                    onClick={addCompositionLine}
+                    className="text-[9px] font-bold px-2 py-1 bg-slate-900 text-white rounded-md hover:bg-black transition-all"
+                >
+                    + AJOUTER LIGNE
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {composition.map((comp, idx) => (
+                  <div key={idx} className="flex gap-3 items-center bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
+                    <select 
+                      className="flex-1 bg-slate-50 border-none rounded-lg p-2 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                      value={comp.baseUnitId}
+                      onChange={(e) => updateCompositionLine(idx, { baseUnitId: e.target.value })}
+                    >
+                      <option value="">Choisir l'unité...</option>
+                      {baseUnits.map((bu: any) => (
+                        <option key={bu.id} value={bu.id}>{bu.symbol} - {bu.name}</option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2 border">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">Coeff:</span>
+                        <input 
+                            type="number" 
+                            step="0.001"
+                            className="w-16 bg-transparent p-2 text-xs font-mono font-bold outline-none"
+                            value={comp.coefficient}
+                            onChange={(e) => updateCompositionLine(idx, { coefficient: e.target.value })}
+                        />
+                    </div>
+                    <button onClick={() => removeCompositionLine(idx)} className="p-2 text-slate-300 hover:text-red-500">
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center text-center p-20 text-slate-300">
+             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+                <CheckCircle2 className="w-10 h-10 opacity-20" />
+             </div>
+             <p className="text-sm font-bold uppercase tracking-widest">Sélectionnez un article pour éditer sa fiche technique</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\components\ui\dynamic-icon.tsx
+================================================================================
+'use client';
+
+import * as Icons from 'lucide-react';
+import { LucideProps } from 'lucide-react';
+
+interface DynamicIconProps extends LucideProps {
+  name: string;
+}
+
+export function DynamicIcon({ name, ...props }: DynamicIconProps) {
+  // @ts-ignore - On récupère l'icône dynamiquement par son nom
+  const IconComponent = Icons[name];
+
+  if (!IconComponent) {
+    return <Icons.HelpCircle {...props} />; // Icône par défaut si non trouvée
+  }
+
+  return <IconComponent {...props} />;
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\components\ui\tabs.tsx
+================================================================================
+"use client"
+
+import * as React from "react"
+import * as TabsPrimitive from "@radix-ui/react-tabs"
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+// Helper pour fusionner les classes Tailwind
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+const Tabs = TabsPrimitive.Root
+
+const TabsList = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.List>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
+>(({ className, ...props }, ref) => (
+  <TabsPrimitive.List
+    ref={ref}
+    className={cn(
+      "inline-flex h-10 items-center justify-center rounded-md bg-slate-100 p-1 text-slate-500",
+      className
+    )}
+    {...props}
+  />
+))
+TabsList.displayName = TabsPrimitive.List.displayName
+
+const TabsTrigger = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
+>(({ className, ...props }, ref) => (
+  <TabsPrimitive.Trigger
+    ref={ref}
+    className={cn(
+      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-slate-950 data-[state=active]:shadow-sm",
+      className
+    )}
+    {...props}
+  />
+))
+TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
+
+const TabsContent = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
+>(({ className, ...props }, ref) => (
+  <TabsPrimitive.Content
+    ref={ref}
+    className={cn(
+      "mt-2 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2",
+      className
+    )}
+    {...props}
+  />
+))
+TabsContent.displayName = TabsPrimitive.Content.displayName
+
+export { Tabs, TabsList, TabsTrigger, TabsContent }
+
+================================================================================
+FILE: quantum-core\apps\studio\lib\domain-config.ts
+================================================================================
+import { Beaker, Zap, Boxes, Cylinder, Droplets, Fan, LucideIcon } from 'lucide-react';
+
+
+export type FieldDefinition = {
+  id: string;
+  label: string;
+  type: 'number' | 'string' | 'select';
+  unit?: string;
+  options?: string[]; // Pour les select
+  default?: any;
+};
+
+// 1. Définition des types (Le Meta-Modèle)
+// C'est le contrat que chaque nouveau domaine devra respecter.
+
+export type NodeSchema = {
+  id: string;
+  label: string;      // Nom affiché (ex: "Cuve", "Batterie")
+  icon: LucideIcon;   // Icône visuelle
+  color: string;      // Couleur de bordure/header (Tailwind class part)
+  description?: string;
+  fields: FieldDefinition[];
+};
+
+export type EdgeSchema = {
+  id: string;
+  label: string;
+  color: string;
+  fields: FieldDefinition[];
+};
+
+export type DomainManifest = {
+  id: string;
+  name: string;
+  nodeTypes: Record<string, NodeSchema>; // "TANK": { ... }
+  edgeTypes: Record<string, EdgeSchema>;
+};
+
+// 2. Configuration Concrète : "WATER" (QuantumH2O)
+// C'est ici que vous configurez le métier.
+
+export const WATER_CONFIG: DomainManifest = {
+  id: "WATER",
+  name: "Traitement de Surface",
+  nodeTypes: {
+    TANK: {
+      id: "TANK",
+      label: "Cuve Process",
+      icon: Beaker,
+      color: "blue-500",
+      description: "Bain actif contenant la chimie",
+      fields: [
+        { id: "volume", label: "Volume", type: "number", unit: "L", default: 1000 },
+        { id: "temp", label: "Température", type: "number", unit: "°C", default: 20 },
+        { id: "material", label: "Matériau", type: "select", options: ["PP", "Inox", "PVDF"], default: "PP" }
+        ]
+    },
+    PUMP: {
+      id: "PUMP",
+      label: "Pompe",
+      icon: Fan, // Faute de mieux pour l'instant
+      color: "slate-500",
+      description: "Organe de transfert hydraulique",
+      fields: [
+        { id: "flow", label: "Débit Nominal", type: "number", unit: "m3/h", default: 10 }
+    ]
+    },
+  },
+  edgeTypes: {
+    PIPE: {
+      id: "PIPE",
+      label: "Tuyauterie",
+      color: "blue-400",
+      fields: [
+        { id: "flowRate", label: "Débit circulant", type: "number", unit: "m³/h", default: 0 },
+      ]
+    }
+  }
+};
+
+// Helper pour récupérer la config active (Pour l'instant hardcodé sur WATER)
+export const currentConfig = WATER_CONFIG;
+
+================================================================================
+FILE: quantum-core\apps\studio\lib\registry.ts
+================================================================================
+import { WATER_CONFIG } from './domains/water';
+
+export const DOMAIN_REGISTRY = {
+  WATER: WATER_CONFIG,
+  // ENERGY: ENERGY_CONFIG (Futur)
+};
+
+export type DomainId = keyof typeof DOMAIN_REGISTRY;
+
+export function getDomainConfig() {
+  // On lit le domaine depuis la variable d'environnement
+  const activeDomain = process.env.NEXT_PUBLIC_ACTIVE_DOMAIN as DomainId;
+  return DOMAIN_REGISTRY[activeDomain] || WATER_CONFIG;
+}
+
+================================================================================
+FILE: quantum-core\apps\studio\lib\domains\water.ts
+================================================================================
+export const WATER_CONFIG = {
+  id: "WATER",
+  name: "Traitement des Eaux",
+  nodeTypes: {
+    // --- SOURCES ---
+    WATER_MAINS: {
+      id: "WATER_MAINS",
+      role: "SOURCE",
+      label: "Arrivée d'eau propre",
+      iconName: "Droplets",
+      color: "blue-400",
+      fields: [{ id: "flowCapacity", label: "Capacité max", type: "number", unit: "L/h", default: 5000 }]
+    },
+    CHEMICAL_STATION: {
+      id: "CHEMICAL_STATION",
+      role: "SOURCE",
+      label: "Poste de dosage",
+      iconName: "FlaskConical",
+      color: "purple-400",
+      fields: []
+    },
+    // --- PROCESS ---
+    TANK: {
+      id: "TANK",
+      role: "PROCESS",
+      label: "Bain Process",
+      iconName: "Beaker",
+      color: "purple-600",
+      fields: [
+        { id: "volume", label: "Volume utile", type: "number", unit: "L", default: 1000 },
+        { id: "temp", label: "Température", type: "number", unit: "°C", default: 20 }
+      ]
+    },
+    // --- SINKS ---
+    STEP_COLLECTOR: {
+      id: "STEP_COLLECTOR",
+      role: "SINK",
+      label: "Collecteur STEP",
+      iconName: "Waves",
+      color: "emerald-500",
+      fields: []
+    }
+  },
+  edgeTypes: {
+    PIPE: { id: "PIPE", label: "Liaison Flux", color: "blue-400", fields: [{ id: "flowRate", label: "Débit", type: "number", unit: "L/h" }] }
+  }
+};
+
+================================================================================
+FILE: quantum-core\apps\studio\store\canvas-store.ts
+================================================================================
+import { create } from 'zustand';
+import { 
+  addEdge, 
+  applyNodeChanges, 
+  applyEdgeChanges,
+  Connection, 
+  Edge, 
+  EdgeChange, 
+  Node, 
+  NodeChange,
+  OnNodesChange,
+  OnEdgesChange,
+  OnConnect
+} from '@xyflow/react';
+import { currentConfig } from '@/lib/domain-config';
+import { 
+  createSequenceAction, 
+  updateSequenceMetaAction,
+  updateSequenceStepsAction,
+  deleteSequenceAction 
+} from '@/app/actions/sequence';
+import { 
+  deleteNodeAction,
+  deleteEdgeAction
+} from '@/app/actions/graph';
+
+// DATA TYPES
+export type AppNodeData = {
+  type: string; 
+  label?: string;
+  properties?: Record<string, any>;
+};
+
+export type AppNode = Node<AppNodeData>;
+
+export type AppSequence = {
+  id: string;
+  name: string;
+  properties: Record<string, any>;
+  steps: string[];
+};
+
+// STORE STATE & ACTIONS INTERFACE
+interface CanvasState {
+  nodes: AppNode[];
+  edges: Edge[];
+  projectId: string | null;
+  lineId: string | null;
+  selectedNodeId: string | null;
+  selectedEdgeId: string | null;
+  sequences: AppSequence[];
+  selectedSequenceId: string | null;
+
+  // Sequence Actions (now async and specific)
+  addSequence: (name: string) => Promise<void>;
+  updateSequenceMeta: (id: string, data: { name?: string; properties?: any; }) => Promise<void>;
+  updateSequenceSteps: (id: string, steps: string[]) => Promise<void>;
+  removeSequence: (id: string) => Promise<void>;
+  
+  // Other Actions
+  setSequences: (seqs: AppSequence[]) => void;
+  setSelectedSequenceId: (id: string | null) => void;
+  setSelectedEdgeId: (id: string | null) => void;
+  updateEdgeProperties: (edgeId: string, properties: any) => void;
+  setProjectId: (id: string) => void;
+  setLineId: (id: string) => void;
+  setSelectedNodeId: (id: string | null) => void;
+  updateNodeProperties: (nodeId: string, properties: any) => void;
+  setGraph: (nodes: AppNode[], edges: Edge[]) => void;
+  onNodesChange: OnNodesChange;
+  onEdgesChange: OnEdgesChange;
+  onConnect: OnConnect;
+  addNode: (type: string, position: { x: number, y: number }) => void;
+}
+
+// STORE IMPLEMENTATION
+export const useCanvasStore = create<CanvasState>((set, get) => ({
+  // Initial State
+  nodes: [],
+  edges: [],
+  projectId: null,
+  lineId: null,
+  selectedNodeId: null,
+  selectedEdgeId: null,
+  sequences: [],
+  selectedSequenceId: null,
+
+  // --- SEQUENCE ACTIONS (PERSISTENT) ---
+  addSequence: async (name) => {
+    const lineId = get().lineId;
+    if (!lineId) return console.error("No active line to add a sequence to.");
+    await createSequenceAction(lineId, name, { cadence: 10, dragOut: 0.1 });
+  },
+  updateSequenceMeta: async (id, data) => {
+    await updateSequenceMetaAction(id, data);
+  },
+  updateSequenceSteps: async (id, steps) => {
+    await updateSequenceStepsAction(id, steps);
+  },
+  removeSequence: async (id) => {
+    if (get().selectedSequenceId === id) {
+      set({ selectedSequenceId: null });
+    }
+    await deleteSequenceAction(id);
+  },
+  
+  // --- OTHER ACTIONS (LOCAL STATE MANAGEMENT) ---
+  setSequences: (sequences) => set({ sequences }),
+  setSelectedSequenceId: (id) => set({ selectedSequenceId: id }),
+  setProjectId: (id) => set({ projectId: id }),
+  setLineId: (id) => set({ lineId: id }),
+  setSelectedNodeId: (id) => set({ selectedNodeId: id }),
+  setSelectedEdgeId: (id) => set({ selectedEdgeId: id, selectedNodeId: null }),
+
+  updateEdgeProperties: (edgeId, props) => {
+    set({
+      edges: get().edges.map(e => 
+        e.id === edgeId 
+          ? { ...e, data: { ...(e.data || {}), ...props } }
+          : e
+      )
+    });
+  },
+  updateNodeProperties: (nodeId, props) => {
+    set({
+      nodes: get().nodes.map(n => 
+        n.id === nodeId 
+          ? { ...n, data: { ...n.data, properties: { ...(n.data.properties || {}), ...props } } }
+          : n
+      )
+    });
+  },
+  setGraph: (nodes, edges) => {
+    set({ nodes, edges });
+  },
+
+  onNodesChange: (changes: NodeChange[]) => {
+    // On déclenche la suppression persistante pour chaque élément enlevé
+    changes.forEach(change => {
+      if (change.type === 'remove') {
+        deleteNodeAction(change.id);
+      }
+    });
+
+    // On met à jour l'état local dans un seul appel `set`
+    set(state => {
+      const newState: Partial<CanvasState> = {
+        nodes: applyNodeChanges(changes, state.nodes) as AppNode[]
+      };
+
+      const selectionChange = changes.find(c => c.type === 'select' && c.selected);
+      if (selectionChange) {
+        newState.selectedNodeId = (selectionChange as any).id;
+        newState.selectedEdgeId = null;
+      }
+      return newState;
+    });
+  },
+
+  onEdgesChange: (changes: EdgeChange[]) => {
+    // On déclenche la suppression persistante
+    changes.forEach(change => {
+      if (change.type === 'remove') {
+        deleteEdgeAction(change.id);
+      }
+    });
+    
+    // On met à jour l'état local
+    set(state => {
+      const newState: Partial<CanvasState> = {
+        edges: applyEdgeChanges(changes, state.edges)
+      };
+
+      const selectionChange = changes.find(c => c.type === 'select' && c.selected);
+      if (selectionChange) {
+        newState.selectedEdgeId = (selectionChange as any).id;
+        newState.selectedNodeId = null;
+      }
+      return newState;
+    });
+  },
+
+  onConnect: (connection) => {
+    // L'ajout de lien n'est pas encore persistant, à faire
+    const newEdge = { ...connection, id: crypto.randomUUID(), type: 'default', data: { flowRate: 0 } };
+    set({ edges: addEdge(newEdge, get().edges) });
+  },
+
+  addNode: (type, position) => {
+    // L'ajout de noeud n'est pas encore persistant, à faire
+    const nodeSchema = currentConfig.nodeTypes[type];
+    const initialProperties = nodeSchema?.fields.reduce((acc, field) => {
+      if (field.default !== undefined) {
+        (acc as any)[field.id] = field.default;
+      }
+      return acc;
+    }, {}) || {};
+
+    const newNode: AppNode = {
+      id: crypto.randomUUID(),
+      type: 'genericNode',
+      position,
+      data: { type, label: `Nouveau ${type}`, properties: initialProperties },
+    };
+    set({ nodes: [...get().nodes, newNode] });
+  },
+}));
+
+================================================================================
+FILE: quantum-core\packages\database\.env
+================================================================================
+DATABASE_URL="postgresql://quantum:password@127.0.0.1:5434/quantum_core?schema=public"
+INTERNAL_API_SECRET="super-secret-quantum-key-2026"
+
+================================================================================
+FILE: quantum-core\packages\database\index.ts
+================================================================================
+import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+
+const connectionString = process.env.DATABASE_URL;
+
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+
+// Fonction pour instancier le client avec l'adaptateur
+const createPrismaClient = () => {
+  // 1. On crée un Pool de connexion PostgreSQL classique
+  const pool = new Pool({ connectionString });
+  
+  // 2. On crée l'adaptateur Prisma qui utilise ce pool
+  const adapter = new PrismaPg(pool);
+  
+  // 3. On passe l'adaptateur au client
+  return new PrismaClient({ adapter });
+};
+
+export const db = globalForPrisma.prisma || createPrismaClient();
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db;
+
+export * from '@prisma/client';
+
+================================================================================
+FILE: quantum-core\packages\database\package.json
+================================================================================
+{
+  "name": "@repo/database",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./index.ts"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "src/*"
+      ]
+    }
+  },
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.2.0",
+    "@prisma/client": "latest",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@prisma/config": "latest",
+    "@types/node": "latest",
+    "@types/pg": "^8.16.0",
+    "dotenv": "latest",
+    "prisma": "latest",
+    "typescript": "latest"
+  }
+}
+
+================================================================================
+FILE: quantum-core\packages\database\prisma.config.ts
+================================================================================
+import { defineConfig, env } from "@prisma/config";
+import "dotenv/config"; 
+
+export default defineConfig({
+  schema: "prisma/schema.prisma",
+  datasource: {
+    url: env("DATABASE_URL"),
+  },
+});
+
+================================================================================
+FILE: quantum-core\packages\database\prisma\schema.prisma
+================================================================================
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// 1. AUTHENTIFICATION & UTILISATEURS
+// ==========================================
+enum UserRole {
+  ADMIN
+  USER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  name          String?
+  role          UserRole  @default(USER)
+  projects      Project[]
+  posts         Post[]
+  createdAt     DateTime  @default(now())
+}
+
+// ==========================================
+// 2. MARKETING & KNOWLEDGE
+// ==========================================
+model Post {
+  id        String   @id @default(cuid())
+  domain    String
+  title     String
+  slug      String   @unique
+  content   String   @db.Text
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+  @@unique([domain, slug])
+}
+
+model Lead {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  domain    String
+  source    String?
+  createdAt DateTime @default(now())
+}
+
+// ==========================================
+// 3. HIERARCHIE PROJET
+// ==========================================
+model Project {
+  id     String @id @default(cuid())
+  name   String
+  domain String
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lines  Line[]
+}
+
+model Line {
+  id        String @id @default(cuid())
+  name      String
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  nodes     Node[]
+  edges     Edge[]
+  sequences Sequence[]
+}
+
+// ==========================================
+// 4. LE GRAPHE (CORE)
+// ==========================================
+enum NodeRole {
+  SOURCE
+  PROCESS
+  SINK
+}
+
+model Node {
+  id          String   @id @default(cuid())
+  lineId      String
+  line        Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  role        NodeRole @default(PROCESS)
+  type        String
+  label       String
+  properties  Json     @db.JsonB
+  positionX   Float
+  positionY   Float
+  inputs      Edge[]   @relation("EdgeTarget")
+  outputs     Edge[]   @relation("EdgeSource")
+  components  NodeComponent[]
+  steps       SequenceStep[]
+}
+
+model Edge {
+  id         String @id @default(cuid())
+  lineId     String
+  line       Line   @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  sourceId   String
+  targetId   String
+  source     Node   @relation("EdgeSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target     Node   @relation("EdgeTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  category   String @default("PHYSICAL")
+  properties Json   @db.JsonB
+}
+
+// ==========================================
+// 5. LOGIQUE SEQUENTIELLE (GAMMES)
+// ==========================================
+model Sequence {
+  id     String @id @default(cuid())
+  name   String
+  lineId String
+  line   Line   @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  properties Json @db.JsonB
+  steps  SequenceStep[]
+}
+
+model SequenceStep {
+  id         String @id @default(cuid())
+  order      Int
+  sequenceId String
+  sequence   Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  nodeId     String
+  node       Node     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// 6. BIBLIOTHÈQUE GÉNÉRIQUE
+// ==========================================
+model BaseUnit {
+  id         String @id @default(cuid())
+  domain     String
+  name       String
+  symbol     String?
+  properties Json   @db.JsonB
+  compositions ItemComposition[]
+  targets      NodeComponent[] @relation("TargetUnit")
+}
+
+model ReferenceItem {
+  id         String @id @default(cuid())
+  domain     String
+  category   String
+  name       String @unique
+  properties Json   @db.JsonB
+  composition ItemComposition[]
+  usages      NodeComponent[]
+}
+
+model ItemComposition {
+  id              String        @id @default(cuid())
+  referenceItemId String
+  referenceItem   ReferenceItem @relation(fields: [referenceItemId], references: [id], onDelete: Cascade)
+  baseUnitId      String
+  baseUnit        BaseUnit      @relation(fields: [baseUnitId], references: [id], onDelete: Cascade)
+  coefficient     Float
+}
+
+enum TargetType {
+  ARTICLE
+  UNIT
+}
+
+model NodeComponent {
+  id               String        @id @default(cuid())
+  nodeId           String
+  node             Node          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  referenceItemId  String
+  referenceItem    ReferenceItem @relation(fields: [referenceItemId], references: [id])
+  targetType       TargetType    @default(ARTICLE)
+  targetBaseUnitId String?
+  targetBaseUnit   BaseUnit?     @relation("TargetUnit", fields: [targetBaseUnitId], references: [id])
+  value            Float
+}
+
+================================================================================
+FILE: quantum-core\packages\eslint-config\README.md
+================================================================================
+# `@turbo/eslint-config`
+
+Collection of internal eslint configurations.
+
+
+================================================================================
+FILE: quantum-core\packages\eslint-config\base.js
+================================================================================
+import js from "@eslint/js";
+import eslintConfigPrettier from "eslint-config-prettier";
+import turboPlugin from "eslint-plugin-turbo";
+import tseslint from "typescript-eslint";
+import onlyWarn from "eslint-plugin-only-warn";
+
+/**
+ * A shared ESLint configuration for the repository.
+ *
+ * @type {import("eslint").Linter.Config[]}
+ * */
+export const config = [
+  js.configs.recommended,
+  eslintConfigPrettier,
+  ...tseslint.configs.recommended,
+  {
+    plugins: {
+      turbo: turboPlugin,
+    },
+    rules: {
+      "turbo/no-undeclared-env-vars": "warn",
+    },
+  },
+  {
+    plugins: {
+      onlyWarn,
+    },
+  },
+  {
+    ignores: ["dist/**"],
+  },
+];
+
+
+================================================================================
+FILE: quantum-core\packages\eslint-config\next.js
+================================================================================
+import js from "@eslint/js";
+import { globalIgnores } from "eslint/config";
+import eslintConfigPrettier from "eslint-config-prettier";
+import tseslint from "typescript-eslint";
+import pluginReactHooks from "eslint-plugin-react-hooks";
+import pluginReact from "eslint-plugin-react";
+import globals from "globals";
+import pluginNext from "@next/eslint-plugin-next";
+import { config as baseConfig } from "./base.js";
+
+/**
+ * A custom ESLint configuration for libraries that use Next.js.
+ *
+ * @type {import("eslint").Linter.Config[]}
+ * */
+export const nextJsConfig = [
+  ...baseConfig,
+  js.configs.recommended,
+  eslintConfigPrettier,
+  ...tseslint.configs.recommended,
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+  {
+    ...pluginReact.configs.flat.recommended,
+    languageOptions: {
+      ...pluginReact.configs.flat.recommended.languageOptions,
+      globals: {
+        ...globals.serviceworker,
+      },
+    },
+  },
+  {
+    plugins: {
+      "@next/next": pluginNext,
+    },
+    rules: {
+      ...pluginNext.configs.recommended.rules,
+      ...pluginNext.configs["core-web-vitals"].rules,
+    },
+  },
+  {
+    plugins: {
+      "react-hooks": pluginReactHooks,
+    },
+    settings: { react: { version: "detect" } },
+    rules: {
+      ...pluginReactHooks.configs.recommended.rules,
+      // React scope no longer necessary with new JSX transform.
+      "react/react-in-jsx-scope": "off",
+    },
+  },
+];
+
+
+================================================================================
+FILE: quantum-core\packages\eslint-config\package.json
+================================================================================
+{
+  "name": "@repo/eslint-config",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./base": "./base.js",
+    "./next-js": "./next.js",
+    "./react-internal": "./react-internal.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@next/eslint-plugin-next": "^15.5.0",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.1",
+    "eslint-plugin-only-warn": "^1.1.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-turbo": "^2.7.1",
+    "globals": "^16.5.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.50.0"
+  }
+}
+
+
+================================================================================
+FILE: quantum-core\packages\eslint-config\react-internal.js
+================================================================================
+import js from "@eslint/js";
+import eslintConfigPrettier from "eslint-config-prettier";
+import tseslint from "typescript-eslint";
+import pluginReactHooks from "eslint-plugin-react-hooks";
+import pluginReact from "eslint-plugin-react";
+import globals from "globals";
+import { config as baseConfig } from "./base.js";
+
+/**
+ * A custom ESLint configuration for libraries that use React.
+ *
+ * @type {import("eslint").Linter.Config[]} */
+export const config = [
+  ...baseConfig,
+  js.configs.recommended,
+  eslintConfigPrettier,
+  ...tseslint.configs.recommended,
+  pluginReact.configs.flat.recommended,
+  {
+    languageOptions: {
+      ...pluginReact.configs.flat.recommended.languageOptions,
+      globals: {
+        ...globals.serviceworker,
+        ...globals.browser,
+      },
+    },
+  },
+  {
+    plugins: {
+      "react-hooks": pluginReactHooks,
+    },
+    settings: { react: { version: "detect" } },
+    rules: {
+      ...pluginReactHooks.configs.recommended.rules,
+      // React scope no longer necessary with new JSX transform.
+      "react/react-in-jsx-scope": "off",
+    },
+  },
+];
+
+
+================================================================================
+FILE: quantum-core\packages\typescript-config\base.json
+================================================================================
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "incremental": false,
+    "isolatedModules": true,
+    "lib": ["es2022", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleDetection": "force",
+    "moduleResolution": "NodeNext",
+    "noUncheckedIndexedAccess": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022"
+  }
+}
+
+
+================================================================================
+FILE: quantum-core\packages\typescript-config\nextjs.json
+================================================================================
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "plugins": [{ "name": "next" }],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowJs": true,
+    "jsx": "preserve",
+    "noEmit": true
+  }
+}
+
+
+================================================================================
+FILE: quantum-core\packages\typescript-config\package.json
+================================================================================
+{
+  "name": "@repo/typescript-config",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
+
+
+================================================================================
+FILE: quantum-core\packages\typescript-config\react-library.json
+================================================================================
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  }
+}
+
+
+================================================================================
+FILE: quantum-core\packages\ui\eslint.config.mjs
+================================================================================
+import { config } from "@repo/eslint-config/react-internal";
+
+/** @type {import("eslint").Linter.Config} */
+export default config;
+
+
+================================================================================
+FILE: quantum-core\packages\ui\package.json
+================================================================================
+{
+  "name": "@repo/ui",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./*": "./src/*.tsx"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "generate:component": "turbo gen react-component",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^22.15.3",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "eslint": "^9.39.1",
+    "typescript": "5.9.2"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}
+
+
+================================================================================
+FILE: quantum-core\packages\ui\tsconfig.json
+================================================================================
+{
+  "extends": "@repo/typescript-config/react-library.json",
+  "compilerOptions": {
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}
+
+
+================================================================================
+FILE: quantum-core\packages\ui\src\button.tsx
+================================================================================
+"use client";
+
+import { ReactNode } from "react";
+
+interface ButtonProps {
+  children: ReactNode;
+  className?: string;
+  appName: string;
+}
+
+export const Button = ({ children, className, appName }: ButtonProps) => {
+  return (
+    <button
+      className={className}
+      onClick={() => alert(`Hello from your ${appName} app!`)}
+    >
+      {children}
+    </button>
+  );
+};
+
+
+================================================================================
+FILE: quantum-core\packages\ui\src\card.tsx
+================================================================================
+import { type JSX } from "react";
+
+export function Card({
+  className,
+  title,
+  children,
+  href,
+}: {
+  className?: string;
+  title: string;
+  children: React.ReactNode;
+  href: string;
+}): JSX.Element {
+  return (
+    <a
+      className={className}
+      href={`${href}?utm_source=create-turbo&utm_medium=basic&utm_campaign=create-turbo"`}
+      rel="noopener noreferrer"
+      target="_blank"
+    >
+      <h2>
+        {title} <span>-&gt;</span>
+      </h2>
+      <p>{children}</p>
+    </a>
+  );
+}
+
+
+================================================================================
+FILE: quantum-core\packages\ui\src\code.tsx
+================================================================================
+import { type JSX } from "react";
+
+export function Code({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}): JSX.Element {
+  return <code className={className}>{children}</code>;
+}
+

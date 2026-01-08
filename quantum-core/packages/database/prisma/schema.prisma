@@ -6,73 +6,219 @@ datasource db {
   provider = "postgresql"
 }
 
-// --- UTILISATEURS (NextAuth standard) ---
-model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  name      String?
-  projects  Project[]
-  createdAt DateTime  @default(now())
+// ==========================================
+// 1. AUTHENTIFICATION & UTILISATEURS
+// ==========================================
+enum UserRole {
+  ADMIN
+  USER
 }
 
-// --- CORE : PROJET ---
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime? // <--- REQUIS pour les liens magiques
+  image         String?
+  role          UserRole  @default(USER)
+  
+  // Relations requises pour Auth.js
+  accounts      Account[]
+  sessions      Session[]
+  
+  projects      Project[]
+  posts         Post[]
+  createdAt     DateTime  @default(now())
+}
+
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ==========================================
+// 2. MARKETING & KNOWLEDGE
+// ==========================================
+model Post {
+  id        String   @id @default(cuid())
+  domain    String
+  title     String
+  slug      String   @unique
+  content   String   @db.Text
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+  @@unique([domain, slug])
+}
+
+model Lead {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  domain    String
+  source    String?
+  createdAt DateTime @default(now())
+}
+
+// ==========================================
+// 3. HIERARCHIE PROJET
+// ==========================================
 model Project {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  domain      String   // "WATER", "ENERGY", etc.
-  
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  
-  nodes       Node[]
-  edges       Edge[]
-  
+  id     String @id @default(cuid())
+  name   String
+  domain String
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lines  Line[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
-// --- CORE : NŒUDS (L'abstraction des Cuves, Pompes, etc.) ---
+model Line {
+  id        String @id @default(cuid())
+  name      String
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  nodes     Node[]
+  edges     Edge[]
+  sequences Sequence[]
+  createdAt DateTime @default(now()) // Utile
+  updatedAt DateTime @updatedAt       // Utile
+}
+
+// ==========================================
+// 4. LE GRAPHE (CORE)
+// ==========================================
+enum NodeRole {
+  SOURCE
+  PROCESS
+  SINK
+}
+
 model Node {
   id          String   @id @default(cuid())
-  projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  
-  type        String   // "TANK", "PUMP", "FILTER" (Défini dans le JSON de config)
-  label       String   // Nom affiché à l'écran
-  
-  // LA MAGIE : Toutes les propriétés techniques sont ici
-  // ex: { "volume": 1000, "material": "HDPE" }
+  lineId      String
+  line        Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  role        NodeRole @default(PROCESS)
+  type        String
+  label       String
   properties  Json     @db.JsonB
-  
-  // Position UI
-  positionX   Float    @default(0)
-  positionY   Float    @default(0)
-
+  positionX   Float
+  positionY   Float
   inputs      Edge[]   @relation("EdgeTarget")
   outputs     Edge[]   @relation("EdgeSource")
+  components  NodeComponent[]
+  steps       SequenceStep[]
 }
 
-// --- CORE : LIENS (L'abstraction des Tuyaux, Câbles) ---
 model Edge {
-  id          String   @id @default(cuid())
-  projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  sourceId    String
-  targetId    String
-  source      Node     @relation("EdgeSource", fields: [sourceId], references: [id], onDelete: Cascade)
-  target      Node     @relation("EdgeTarget", fields: [targetId], references: [id], onDelete: Cascade)
-
-  type        String   // "PIPE", "CABLE"
-  properties  Json     @db.JsonB // ex: { "diameter": 50, "flow_max": 10 }
+  id         String @id @default(cuid())
+  lineId     String
+  line       Line   @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  sourceId   String
+  targetId   String
+  source     Node   @relation("EdgeSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target     Node   @relation("EdgeTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  category   String @default("PHYSICAL")
+  properties Json   @db.JsonB
 }
 
-model CatalogItem {
-  id          String   @id @default(cuid())
-  domain      String   // "WATER", "ENERGY"
-  category    String   // "PUMP", "TANK"
-  name        String
-  specs       Json     @db.JsonB
-  createdAt   DateTime @default(now())
+// ==========================================
+// 5. LOGIQUE SEQUENTIELLE (GAMMES)
+// ==========================================
+model Sequence {
+  id     String @id @default(cuid())
+  name   String
+  lineId String
+  line   Line   @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  properties Json @db.JsonB
+  steps  SequenceStep[]
+}
+
+model SequenceStep {
+  id         String @id @default(cuid())
+  order      Int
+  sequenceId String
+  sequence   Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  nodeId     String
+  node       Node     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// 6. BIBLIOTHÈQUE GÉNÉRIQUE
+// ==========================================
+model BaseUnit {
+  id         String @id @default(cuid())
+  domain     String
+  name       String
+  symbol     String?
+  properties Json   @db.JsonB
+  compositions ItemComposition[]
+  targets      NodeComponent[] @relation("TargetUnit")
+}
+
+model ReferenceItem {
+  id         String @id @default(cuid())
+  domain     String
+  category   String
+  name       String @unique
+  properties Json   @db.JsonB
+  composition ItemComposition[]
+  usages      NodeComponent[]
+}
+
+model ItemComposition {
+  id              String        @id @default(cuid())
+  referenceItemId String
+  referenceItem   ReferenceItem @relation(fields: [referenceItemId], references: [id], onDelete: Cascade)
+  baseUnitId      String
+  baseUnit        BaseUnit      @relation(fields: [baseUnitId], references: [id], onDelete: Cascade)
+  coefficient     Float
+}
+
+enum TargetType {
+  ARTICLE
+  UNIT
+}
+
+model NodeComponent {
+  id               String        @id @default(cuid())
+  nodeId           String
+  node             Node          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  referenceItemId  String
+  referenceItem    ReferenceItem @relation(fields: [referenceItemId], references: [id])
+  targetType       TargetType    @default(ARTICLE)
+  targetBaseUnitId String?
+  targetBaseUnit   BaseUnit?     @relation("TargetUnit", fields: [targetBaseUnitId], references: [id])
+  value            Float
 }
