@@ -29,6 +29,8 @@ const REGISTRY: Record<string, ComponentMap> = {
     },
     widgets: {
       TANK: WaterPropertiesWidget, // S'ajoute en plus du formulaire
+      SINK: WaterPropertiesWidget,    
+      SOURCE: WaterPropertiesWidget,
     },
     panels: {
       EMPTY_SELECTION: NetworkListManager, // S'affiche quand rien n'est sélectionné

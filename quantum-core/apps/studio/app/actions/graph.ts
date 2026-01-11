@@ -6,52 +6,52 @@ import { auth } from "@/auth";
 
 // --- HELPER DE SÉCURITÉ ---
 /**
- * Vérifie que l'utilisateur connecté est bien le propriétaire du projet lié à cette ligne.
- * Renvoie la ligne si OK, throw une erreur sinon.
+ * Vérifie que l'utilisateur connecté est bien le propriétaire du projet lié à ce système.
+ * Renvoie le système si OK, throw une erreur sinon.
  */
-async function getAuthenticatedLine(lineId: string) {
+async function getAuthenticatedSystem(systemId: string) {
   const session = await auth();
   
   if (!session?.user?.id) {
     throw new Error("Authentification requise pour accéder à cette ressource.");
   }
 
-  // On cherche la ligne ET on vérifie que le projet parent appartient au user
-  const line = await db.line.findFirst({
+  // On cherche le système ET on vérifie que le projet parent appartient au user
+  const system = await db.system.findFirst({
     where: { 
-      id: lineId,
+      id: systemId,
       project: {
         userId: session.user.id
       }
     },
-    include: { project: true } // Optionnel, si on a besoin d'infos projet
+    include: { project: true } // Optionnel
   });
 
-  if (!line) {
-    // On reste vague sur l'erreur pour ne pas confirmer l'existence de l'ID
-    throw new Error("Accès refusé ou ligne introuvable.");
+  if (!system) {
+    // On reste vague sur l'erreur pour la sécurité
+    throw new Error("Accès refusé ou système introuvable.");
   }
 
-  return line;
+  return system;
 }
 
 /**
- * Charge les noeuds et les liens pour une ligne donnée.
+ * Charge les noeuds et les liens pour un système donné.
  */
-export async function loadGraph(lineId: string) {
-  if (!lineId) return { nodes: [], edges: [] };
+export async function loadGraph(systemId: string) {
+  if (!systemId) return { nodes: [], edges: [] };
 
   try {
     // 1. VÉRIFICATION DE SÉCURITÉ
-    await getAuthenticatedLine(lineId);
+    await getAuthenticatedSystem(systemId);
 
     // 2. CHARGEMENT PARALLÈLE
     const [rawNodes, rawEdges] = await Promise.all([
-      db.node.findMany({ where: { lineId } }),
-      db.edge.findMany({ where: { lineId } })
+      db.node.findMany({ where: { systemId } }),
+      db.edge.findMany({ where: { systemId } })
     ]);
 
-    // 3. MAPPING (inchangé)
+    // 3. MAPPING (inchangé, sauf adaptation des types si nécessaire)
     const nodes = rawNodes.map(node => ({
       id: node.id,
       type: node.type, 
@@ -76,8 +76,6 @@ export async function loadGraph(lineId: string) {
 
   } catch (error: any) {
     console.error("Security/Load Error:", error.message);
-    // On renvoie un graphe vide en cas d'erreur pour ne pas faire planter l'UI, 
-    // mais idéalement on devrait gérer l'erreur côté client.
     return { nodes: [], edges: [], error: error.message };
   }
 }
@@ -86,26 +84,26 @@ export async function loadGraph(lineId: string) {
  * Sauvegarde complète du graphe par synchronisation (Batch)
  */
 export async function saveGraph(
-  lineId: string, 
+  systemId: string, 
   nodes: any[], 
   edges: any[], 
   sequences: any[]
 ) {
-  if (!lineId) return { success: false, error: "ID de ligne manquant" };
+  if (!systemId) return { success: false, error: "ID de système manquant" };
 
   try {
-    // 1. Verify ownership first (using the secure function we fixed in the previous step)
-    await getAuthenticatedLine(lineId);
+    // 1. Verify ownership first
+    await getAuthenticatedSystem(systemId);
 
     const nodeIds = nodes.map(n => n.id);
     const edgeIds = edges.map(e => e.id);
     const sequenceIds = sequences.map(s => s.id);
 
-  await db.$transaction(async (tx) => {
+    await db.$transaction(async (tx) => {
       // --- NODES: DIFF SYNC ---
       // Delete nodes that are no longer present in the editor
       await tx.node.deleteMany({ 
-        where: { lineId, id: { notIn: nodeIds } } 
+        where: { systemId, id: { notIn: nodeIds } } 
       });
 
       // Upsert nodes (Update if exists, Create if new)
@@ -120,7 +118,7 @@ export async function saveGraph(
           },
           create: {
             id: node.id,
-            lineId,
+            systemId, // Renommé de lineId à systemId
             positionX: node.position.x,
             positionY: node.position.y,
             type: node.data.type,
@@ -133,7 +131,7 @@ export async function saveGraph(
 
       // --- EDGES: DIFF SYNC ---
       await tx.edge.deleteMany({ 
-        where: { lineId, id: { notIn: edgeIds } } 
+        where: { systemId, id: { notIn: edgeIds } } 
       });
 
       for (const edge of edges) {
@@ -146,7 +144,7 @@ export async function saveGraph(
           },
           create: {
             id: edge.id,
-            lineId,
+            systemId, // Renommé de lineId à systemId
             sourceId: edge.source,
             targetId: edge.target,
             properties: edge.data || {},
@@ -156,17 +154,19 @@ export async function saveGraph(
       }
 
       // --- SEQUENCES: CLEAN REORDERING ---
-      // Sequences are logic-heavy, so we clean steps but KEEP sequence metadata where possible
-      await tx.sequenceStep.deleteMany({ where: { sequence: { lineId } } });
+      // On supprime les steps des séquences appartenant à ce système
+      await tx.sequenceStep.deleteMany({ where: { sequence: { systemId } } });
+      
+      // On supprime les séquences qui ne sont plus présentes
       await tx.sequence.deleteMany({ 
-        where: { lineId, id: { notIn: sequenceIds } } 
+        where: { systemId, id: { notIn: sequenceIds } } 
       });
 
       for (const seq of sequences) {
         await tx.sequence.upsert({
           where: { id: seq.id },
           update: { name: seq.name, properties: seq.properties || {} },
-          create: { id: seq.id, lineId, name: seq.name, properties: seq.properties || {} }
+          create: { id: seq.id, systemId, name: seq.name, properties: seq.properties || {} }
         });
 
         if (seq.steps.length > 0) {
@@ -181,8 +181,11 @@ export async function saveGraph(
       }
     });
 
-    // Target revalidation instead of global '/'
-    revalidatePath(`/editor/${lineId}`);
+    // Revalidation du cache pour rafraîchir l'interface
+    // Note: Assurez-vous que le chemin correspond à votre routing. 
+    // Si vous êtes sur /editor/[projectId], revalidatePath('/editor/[projectId]') est mieux,
+    // mais ici on garde la logique précédente adaptée.
+    revalidatePath(`/editor/${systemId}`); 
     return { success: true };
   } catch (error: any) {
     console.error("Save Error:", error);

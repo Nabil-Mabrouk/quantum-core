@@ -106,8 +106,8 @@ model Project {
   domain        String
   userId        String
   user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lines         Line[]
-  // --- NOUVEAUX CHAMPS (Quantum-H2O Parity) ---
+  systems       System[]         
+  streams       ProjectStream[] 
   hoursPerDay   Float                 @default(8)
   daysPerWeek   Float                 @default(5)
   weeksPerYear  Float                 @default(47)
@@ -117,16 +117,40 @@ model Project {
   collaborators ProjectCollaborator[]
 }
 
-model Line {
-  id        String     @id @default(cuid())
-  name      String
-  projectId String
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  nodes     Node[]
-  edges     Edge[]
-  sequences Sequence[]
-  createdAt DateTime   @default(now()) // Utile
-  updatedAt DateTime   @updatedAt // Utile
+model System {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  type        String    @default("PRODUCTION") // "PRODUCTION" | "TREATMENT"
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  positionX   Float     @default(100)
+  positionY   Float     @default(100)
+  
+  nodes       Node[]
+  edges       Edge[]
+  sequences   Sequence[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model ProjectStream {
+  id          String   @id @default(cuid())
+  name        String
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  // État calculé (Snapshot de la dernière simulation)
+  value       Json     @default("{}") @db.JsonB 
+  
+  // Relations aux Noeuds (Qui écrit ? Qui lit ?)
+  inputs      Node[]   @relation("StreamInput")  // Noeuds qui LISENT ce flux (Sources)
+  outputs     Node[]   @relation("StreamOutput") // Noeuds qui ÉCRIVENT ce flux (Sinks)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // ==========================================
@@ -140,8 +164,8 @@ enum NodeRole {
 
 model Node {
   id         String          @id @default(cuid())
-  lineId     String
-  line       Line            @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  systemId      String
+  system        System   @relation(fields: [systemId], references: [id], onDelete: Cascade)
   role       NodeRole        @default(PROCESS)
   type       String
   label      String
@@ -152,12 +176,16 @@ model Node {
   outputs    Edge[]          @relation("EdgeSource")
   components NodeComponent[]
   steps      SequenceStep[]
+  inputStreamId  String?
+  inputStream    ProjectStream? @relation("StreamInput", fields: [inputStreamId], references: [id])
+  outputStreamId String?
+  outputStream   ProjectStream? @relation("StreamOutput", fields: [outputStreamId], references: [id])
 }
 
 model Edge {
   id         String @id @default(cuid())
-  lineId     String
-  line       Line   @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  systemId    String
+  system      System   @relation(fields: [systemId], references: [id], onDelete: Cascade)
   sourceId   String
   targetId   String
   source     Node   @relation("EdgeSource", fields: [sourceId], references: [id], onDelete: Cascade)
@@ -172,8 +200,8 @@ model Edge {
 model Sequence {
   id         String         @id @default(cuid())
   name       String
-  lineId     String
-  line       Line           @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  systemId    String
+  system      System   @relation(fields: [systemId], references: [id], onDelete: Cascade)
   properties Json           @db.JsonB
   steps      SequenceStep[]
 }

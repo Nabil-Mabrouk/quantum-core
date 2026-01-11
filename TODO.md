@@ -70,3 +70,90 @@ The project implements several good security practices but has specific vulnerab
 3.  **Performance:** Implement a hash-based cache in the Python engine to avoid re-calculating identical matrices.
 4.  **Database:** Refactor `saveGraph` to use `createMany` and avoid deleting/recreating entire sub-graphs on every save.
 5.  **Logic:** In `solver.py`, raise a specific "Configuration Warning" if `q_out_total` is 0, rather than silencing it with `1e-9`.
+
+-------
+
+C'est un projet très ambitieux et architecturalement intéressant (Monorepo Turborepo, Next.js App Router, Python FastAPI pour le calcul scientifique, Architecture Hexagonale via le Domain Registry).
+
+Voici mon analyse détaillée selon tes 4 axes :
+
+### 1. Sécurité
+
+Le projet a de bonnes bases (séparation des services, NextAuth), mais présente des vulnérabilités classiques de "phase de prototypage".
+
+**Points Forts :**
+*   **Isolation du Moteur :** Le moteur Python est isolé et protégé par un `INTERNAL_API_SECRET`. Il n'est pas exposé directement au public, mais proxifié par les Server Actions de Next.js.
+*   **Vérification de Propriété (`graph.ts`) :** La fonction `getAuthenticatedSystem` vérifie bien que le `systemId` appartient à un projet dont l'utilisateur est propriétaire. C'est crucial pour éviter l'IDOR (Insecure Direct Object Reference).
+*   **Architecture "Server-First" :** L'utilisation massive des Server Actions (`'use server'`) réduit la surface d'attaque côté client.
+
+**Points Critiques & Vulnérabilités :**
+*   **Gestion des Secrets (Docker) :** Dans `docker-compose.yml`, le secret `INTERNAL_API_SECRET` est hardcodé (`super-secret-quantum-key-2026`). En production, ceci doit passer par des variables d'environnement injectées au runtime, pas écrites dans le fichier.
+*   **Validation des Entrées (Inconsistant) :**
+    *   *Bien :* `actions/leads.ts` utilise `zod` pour valider l'email.
+    *   *Risqué :* `actions/admin-blog.ts` fait des casts bruts (`formData.get('title') as string`). Si un attaquant envoie un objet ou un tableau, cela peut faire crasher le serveur ou causer des comportements inattendus.
+    *   *Risqué :* `actions/library.ts` -> `importLibraryAction` parse du JSON uploadé par l'utilisateur sans limite de taille stricte ni validation profonde de la structure avant le parsing, ce qui expose au DoS (Denial of Service).
+*   **Middleware Auth (`middleware.ts`) :** L'usage de `// @ts-ignore` sur `req.auth` est dangereux. Si la structure de l'objet session change (ce qui arrive souvent avec les bêtas de NextAuth v5), tes routes admin pourraient devenir accessibles ou crasher silencieusement.
+*   **NextAuth Beta :** Tu utilises `next-auth: 5.0.0-beta.30`. Les versions bêta contiennent souvent des failles de sécurité non corrigées ou des changements de rupture.
+
+### 2. Performance
+
+L'architecture est performante pour la lecture, mais l'écriture et le calcul intensif nécessitent des optimisations.
+
+**Points Forts :**
+*   **Parallel Data Fetching :** Dans `admin/stats/page.tsx`, l'utilisation de `Promise.all` pour charger les stats en parallèle est excellente.
+*   **React Flow Optimization :** L'usage de `useMemo` pour `nodeTypes` dans `flow-editor.tsx` évite des re-renders inutiles du graphe complet.
+
+**Points d'Amélioration :**
+*   **Le problème "N+1" en écriture (`saveGraph`) :**
+    *   Dans `actions/graph.ts`, la sauvegarde fait un `deleteMany` puis une boucle `for` avec `upsert` pour chaque nœud et chaque lien.
+    *   *Impact :* Pour un système de 500 nœuds, tu ouvres 1000+ requêtes SQL séquentielles dans une transaction. Cela va bloquer la DB.
+    *   *Solution :* Utiliser `createMany` pour les insertions massives ou envoyer un JSON global si l'accès unitaire aux nœuds n'est pas requis par d'autres services.
+*   **Moteur Python (Absence de Cache) :**
+    *   Chaque clic sur "Simuler" renvoie tout le graphe au Python qui recalcule tout (matrices NumPy).
+    *   *Solution :* Implémenter un hash du payload côté Python (ex: Redis) pour renvoyer le résultat caché si les inputs n'ont pas changé.
+*   **Bundle Size :** L'import de `lucide-react` est généralement bon, mais assure-toi que ton `import * as Icons` dans `dynamic-icon.tsx` ne casse pas le Tree-Shaking. Charger toutes les icônes peut alourdir le bundle client considérablement.
+
+### 3. Expérience Utilisateur (UX)
+
+L'UX est pensée pour des ingénieurs, avec une distinction claire entre la conception et l'analyse.
+
+**Points Forts :**
+*   **Feedback Visuel :** Les "Health Bars" de pollution sur les nœuds (`GenericNode`) et les animations de flux dans `BlueprintFlow` rendent la physique "visible".
+*   **Navigation Contextuelle :** Le `UniversalHeader` qui change selon qu'on est au niveau Projet ou Système est très intuitif.
+*   **Mode "Synoptique" vs "Graph" :** C'est une excellente idée. Les ingénieurs procédés aiment les schémas P&ID (Graphe), les opérateurs préfèrent les vues séquentielles (Synoptique).
+
+**Points d'Amélioration :**
+*   **Interactions Bloquantes :**
+    *   L'utilisation de `alert()` et `confirm()` natifs (ex: `header.tsx`, `library-manager.tsx`) est à bannir en 2026. Cela bloque le thread principal du navigateur et fait "amateur".
+    *   *Solution :* Utiliser les "Toasts" (ex: `sonner` ou `react-hot-toast`) et des Modales (Dialog) de ta bibliothèque UI.
+*   **Gestion des Erreurs Moteur :** Si le conteneur Python est éteint, l'utilisateur reçoit une alerte générique. Il faudrait un état visuel "Système Déconnecté" dans le Header.
+*   **Responsive Mobile :** Le `FlowEditor` et le `Synoptique` semblent difficilement utilisables sur mobile (pas de contrôles tactiles spécifiques visibles). Un avertissement "Vue optimisée pour Desktop" serait pertinent sur petit écran.
+
+### 4. Navigabilité & Qualité du Code
+
+La structure du code est probablement le point le plus fort du projet. Elle est modulaire et prête à scaler.
+
+**Points Forts :**
+*   **Pattern "Domain Registry" (`lib/component-registry.tsx`) :**
+    *   C'est brillant. Tu injectes dynamiquement les composants (Formulaires, Widgets, Nœuds) selon le domaine (`WATER`, `ENERGY`). Cela te permet d'ajouter le domaine "ENERGY" sans toucher au code cœur du Studio.
+*   **Séparation Logiciel/Métier :**
+    *   `apps/engine` contient la physique (Python).
+    *   `apps/studio` contient l'interface.
+    *   `packages/database` contient le schéma.
+    *   C'est une séparation des responsabilités très propre (Clean Architecture).
+
+**Points de Vigilance :**
+*   **Le "God Store" (`canvas-store.ts`) :**
+    *   Ce fichier gère tout : le graphe, la sélection, les séquences, le mode de vue, les données de bilan... Il devient massif.
+    *   *Conseil :* Découper avec le pattern "Slice" de Zustand (`createGraphSlice`, `createUISlice`, `createSimulationSlice`) dans des fichiers séparés.
+*   **Typage `any` :**
+    *   Il y a beaucoup de `any` dans le code (ex: `items: any[]` dans `LibraryManager`, `config: any` dans les props).
+    *   Cela annule les bénéfices de TypeScript. Il faudrait définir des interfaces strictes (`LibraryItem`, `DomainConfig`) dans un package partagé (`packages/types` ?).
+
+### Résumé des priorités
+
+1.  **URGENT (Sécurité) :** Remplacer les `alert()` par des toasts, sécuriser les `FormData` avec Zod partout, et corriger le `@ts-ignore` du middleware.
+2.  **IMPORTANT (Perf) :** Refactoriser `saveGraph` pour éviter l'insertion boucle par boucle.
+3.  **EVOLUTION :** Découper le `canvas-store.ts` avant qu'il ne devienne ingérable.
+
+C'est un excellent projet, très mature pour un "one-man project". La structure Registry/Engine est digne d'un SaaS industriel sérieux.

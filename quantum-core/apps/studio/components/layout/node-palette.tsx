@@ -9,8 +9,15 @@ interface NodePaletteProps {
 }
 
 export function NodePalette({ config }: NodePaletteProps) {
+  // 1. DÉCLARATION DES HOOKS (Toujours en premier)
   const addNode = useCanvasStore((state) => state.addNode);
+  const viewMode = useCanvasStore((state) => state.viewMode);
 
+  // 2. CONDITION DE SORTIE (Après les hooks)
+  // On masque la palette en mode Bilan pour libérer de l'espace
+  if (viewMode === 'SUMMARY') return null;
+
+  // 3. LOGIQUE DE RENDU
   // On récupère la liste des types définis dans le manifeste du domaine
   const nodeTypes = Object.values(config.nodeTypes || {});
 
@@ -22,12 +29,12 @@ export function NodePalette({ config }: NodePaletteProps) {
         </h2>
       </div>
       
-      <div className="p-4 space-y-3 overflow-y-auto flex-1">
+      <div className="p-4 space-y-3 overflow-y-auto flex-1 custom-scrollbar">
         {nodeTypes.map((node: any) => (
           <button
             key={node.id}
             onClick={() => addNode(node.id, { x: Math.random() * 200, y: Math.random() * 200 })}
-            className="group flex items-center w-full gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:border-blue-400 hover:shadow-lg hover:shadow-blue-500/5 transition-all text-left"
+            className="group flex items-center w-full gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:border-blue-400 hover:shadow-lg hover:shadow-blue-500/5 transition-all text-left cursor-pointer"
           >
             {/* Icône dynamique basée sur le nom dans la config */}
             <div className={`p-2 rounded-lg bg-slate-50 border border-slate-100 text-slate-500 group-hover:text-blue-600 group-hover:bg-blue-50 group-hover:border-blue-100 transition-colors`}>
@@ -50,10 +57,22 @@ export function NodePalette({ config }: NodePaletteProps) {
         ))}
 
         {nodeTypes.length === 0 && (
-          <p className="text-xs text-center text-slate-400 py-10">
-            Aucun équipement configuré.
-          </p>
+          <div className="flex flex-col items-center justify-center py-20 text-center space-y-2">
+            <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100">
+               <Plus className="w-5 h-5 text-slate-200" />
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                Aucun équipement<br/>disponible
+            </p>
+          </div>
         )}
+      </div>
+      
+      {/* Footer informatif discret */}
+      <div className="p-4 border-t border-slate-100 bg-slate-50/30">
+          <p className="text-[8px] text-slate-300 font-bold uppercase tracking-tighter text-center">
+            Domaine : {config.id} • v2.1
+          </p>
       </div>
     </aside>
   );

@@ -1,32 +1,38 @@
 import { db } from '@repo/database';
 import { NodePalette } from '@/components/layout/node-palette';
-import { Header } from '@/components/layout/header';
 import { PropertiesPanel } from '@/components/layout/properties-panel';
 import { ProjectInitializer } from '@/components/layout/project-initializer';
-import { Workspace } from '@/components/layout/workspace'; // Import du nouveau composant
+import { Workspace } from '@/components/layout/workspace';
+
+// Nouveaux composants de navigation Shell
+import { SideNav } from '@/components/layout/shell/side-nav';
+import { UniversalHeader } from '@/components/layout/shell/universal-header';
 
 import { loadGraph } from '../../actions/graph';
 import { getDomainConfig } from '@/lib/registry';
 
 export default async function EngineeringStudio(props: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ lineId?: string }>;
+  searchParams: Promise<{ systemId?: string }>;
 }) {  
   const { id: projectId } = await props.params;
-  const { lineId: searchLineId } = await props.searchParams;
+  const { systemId: searchSystemId } = await props.searchParams;
   const config = getDomainConfig();
 
+  // 1. Chargement du projet et de ses systèmes
   const project = await db.project.findUniqueOrThrow({ 
     where: { id: projectId },
-    include: { lines: true }
+    include: { systems: true }
   });
   
-  const currentLineId = searchLineId || project.lines[0]?.id;
-  if (!currentLineId) return <div>Erreur : Ligne introuvable</div>;
+  // 2. Détermination du système courant
+  const currentSystemId = searchSystemId || project.systems[0]?.id;
+  if (!currentSystemId) return <div>Erreur : Système introuvable</div>;
 
-  const initialGraph = await loadGraph(currentLineId);
+  // 3. Chargement du graphe et des séquences
+  const initialGraph = await loadGraph(currentSystemId);
   const sequencesFromDb = await db.sequence.findMany({
-    where: { lineId: currentLineId },
+    where: { systemId: currentSystemId },
     include: { steps: { orderBy: { order: 'asc' } } }
   });
 
@@ -38,30 +44,45 @@ export default async function EngineeringStudio(props: {
   }));
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-white text-slate-900">
-      <ProjectInitializer 
-        projectId={project.id} 
-        lineId={currentLineId}
-        initialNodes={initialGraph.nodes} 
-        initialEdges={initialGraph.edges}
-        initialSequences={initialSequences}
-      />
+    <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-900">
       
-      <Header 
-        config={config} 
-        lines={project.lines} 
-        currentLineId={currentLineId} 
-        projectId={project.id} 
-      />
+      {/* BARRE LATÉRALE DE CONTEXTE (Navigation entre Blueprint / Conception / Library) */}
+      <SideNav projectId={projectId} systemId={currentSystemId} />
 
-      <main className="flex-1 flex overflow-hidden">
-        <NodePalette config={config} />
+      <div className="flex-1 flex flex-col overflow-hidden">
         
-        {/* On utilise le Workspace qui gère le switch GRAPH/SYNOPTIC */}
-        <Workspace config={config} />
+        {/* HEADER UNIFIÉ (Breadcrumbs interactifs et Sélecteur de système) */}
+        <UniversalHeader 
+          projectName={project.name}
+          projectId={projectId}
+          systems={project.systems}
+          currentSystemId={currentSystemId}
+          // Note : La logique de sauvegarde est gérée dans UniversalHeader via le store
+        />
 
-        <PropertiesPanel config={config} />
-      </main>
+        {/* INITIALISATION DU STORE CLIENT (Données du serveur vers Zustand) */}
+        <ProjectInitializer 
+          projectId={project.id} 
+          systemId={currentSystemId}
+          initialNodes={initialGraph.nodes} 
+          initialEdges={initialGraph.edges}
+          initialSequences={initialSequences}
+        />
+
+        {/* ESPACE DE TRAVAIL ÉDITEUR */}
+        <main className="flex-1 flex overflow-hidden bg-slate-50">
+          
+          {/* Palette d'équipements */}
+          <NodePalette config={config} />
+          
+          {/* Zone centrale (Graphe / Synoptique / Bilan) */}
+          <Workspace config={config} />
+
+          {/* Panneau des propriétés à droite */}
+          <PropertiesPanel config={config} />
+          
+        </main>
+      </div>
     </div>
   );
 }

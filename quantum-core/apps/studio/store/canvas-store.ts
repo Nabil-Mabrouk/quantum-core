@@ -6,42 +6,20 @@ import {
   Connection
 } from '@xyflow/react';
 import { getDomainConfig } from '@/lib/registry';
-import { createSequenceAction, deleteSequenceAction, updateSequenceMetaAction, updateSequenceStepsAction } from '@/app/actions/sequence';
+import { 
+  createSequenceAction, 
+  deleteSequenceAction, 
+  updateSequenceMetaAction, 
+  updateSequenceStepsAction 
+} from '@/app/actions/sequence';
 
-// --- DEFINITION DES TYPES ---
+// --- DÉFINITION DES TYPES GÉNÉRIQUES ---
 
-// Propriétés génériques d'un noeud métier
 export interface NodeProperties {
-  type?: string;
-  label?: string;
-  // Champs spécifiques Eau
-  volume?: number;
-  temp?: number;
-  evapAuto?: boolean;
-  evaporationRate?: number;
-  inletAuto?: boolean;
-  inletFlow?: number;
-  inletType?: 'CLEAN_WATER' | 'CASCADE';
-  
-  // Champs spécifiques Logiciel / Connexions
-  dumpingNetworkId?: string | null;
-  overflowNetworkId?: string | null;
-  compensationSourceId?: string | null;
-  
-  // Résultats de simulation (Non persisté ou optionnel)
-  simulationResults?: {
-    concentrations?: Record<string, number>;
-    warnings?: Array<{ severity: 'CRITICAL'|'WARNING', message: string }>;
-    flow?: number;
-    evaporation?: number;
-    chemicalAddition?: number;
-  };
-
-  // Extension libre (JsonB)
   [key: string]: any; 
+  simulationResults?: Record<string, any>; // Stockage des résultats du moteur Python
 }
 
-// Structure de données interne de React Flow
 export interface AppNodeData extends Record<string, unknown> {
   type: string;
   label: string;
@@ -54,29 +32,27 @@ export type AppNode = Node<AppNodeData>;
 export interface AppSequence {
   id: string;
   name: string;
-  properties: {
-    cadence?: number;
-    dragOut?: number;
-    [key: string]: any;
-  };
-  steps: string[]; // Liste d'IDs de noeuds
+  properties: Record<string, any>;
+  steps: string[];
 }
 
-// --- SLICES DU STORE ---
+// --- STRUCTURE DES SLICES ---
 
 interface WorkspaceSlice {
   projectId: string | null;
-  lineId: string | null;
+  systemId: string | null; 
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
   viewMode: 'GRAPH' | 'SYNOPTIC' | 'SUMMARY';
-  summaryData: any | null;
+  synopticMode: 'PHYSICAL' | 'SEQUENCE';
+  summaryData: any | null; // C'est ici que sont stockés les résultats du AnalysisReport
   
   setProjectId: (id: string) => void;
-  setLineId: (id: string) => void;
+  setSystemId: (id: string) => void;
   setSelectedNodeId: (id: string | null) => void;
   setSelectedEdgeId: (id: string | null) => void;
   setViewMode: (mode: 'GRAPH' | 'SYNOPTIC' | 'SUMMARY') => void;
+  setSynopticMode: (mode: 'PHYSICAL' | 'SEQUENCE') => void;
   setSummaryData: (data: any | null) => void;
 }
 
@@ -86,8 +62,6 @@ interface GraphSlice {
   
   setGraph: (nodes: AppNode[], edges: Edge[]) => void;
   addNode: (type: string, position: { x: number, y: number }) => void;
-  
-  // Mise à jour partielle (Patch) des propriétés
   updateNodeProperties: (nodeId: string, properties: Partial<NodeProperties>) => void;
   updateNodeLabel: (nodeId: string, label: string) => void;
   updateEdgeProperties: (edgeId: string, properties: any) => void;
@@ -111,20 +85,22 @@ interface SequenceSlice {
 
 type CanvasState = WorkspaceSlice & GraphSlice & SequenceSlice;
 
-// --- IMPLEMENTATION ---
+// --- IMPLÉMENTATION DES SLICES ---
 
 const createWorkspaceSlice: StateCreator<CanvasState, [], [], WorkspaceSlice> = (set) => ({
   projectId: null,
-  lineId: null,
+  systemId: null,
   selectedNodeId: null,
   selectedEdgeId: null,
   viewMode: 'GRAPH',
+  synopticMode: 'PHYSICAL',
   summaryData: null,
   setProjectId: (id) => set({ projectId: id }),
-  setLineId: (id) => set({ lineId: id }),
+  setSystemId: (id) => set({ systemId: id }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id, selectedEdgeId: null }),
   setSelectedEdgeId: (id) => set({ selectedEdgeId: id, selectedNodeId: null }),
   setViewMode: (mode) => set({ viewMode: mode }),
+  setSynopticMode: (mode) => set({ synopticMode: mode }),
   setSummaryData: (data) => set({ summaryData: data }),
 });
 
@@ -137,7 +113,6 @@ const createGraphSlice: StateCreator<CanvasState, [], [], GraphSlice> = (set, ge
     const config = getDomainConfig();
     const nodeSchema = config.nodeTypes[type];
     
-    // Valeurs par défaut depuis le schéma
     const initialProps: NodeProperties = nodeSchema?.fields?.reduce((acc: any, f: any) => {
       acc[f.id] = f.default;
       return acc;
@@ -163,6 +138,7 @@ const createGraphSlice: StateCreator<CanvasState, [], [], GraphSlice> = (set, ge
   },
 
   updateNodeProperties: async (nodeId, props) => {
+    // 1. Mise à jour Optimiste de l'UI
     set(state => ({
       nodes: state.nodes.map(n => 
         n.id === nodeId 
@@ -171,15 +147,13 @@ const createGraphSlice: StateCreator<CanvasState, [], [], GraphSlice> = (set, ge
       )
     }));
 
-    // Trigger Simulation Locale (Optionnel / Background)
+    // 2. Évaluation rapide (Physique) si nécessaire
     const node = get().nodes.find(n => n.id === nodeId);
     if (node) {
         const config = getDomainConfig();
-        // Dynamique import pour éviter circular dependency
         const { evaluateNodeAction } = await import('@/app/actions/simulation');
         const result = await evaluateNodeAction(config.id, node.type!, node.data.properties);
         
-        // Update avec résultat calculé
         set(state => ({
             nodes: state.nodes.map(n => 
                 n.id === nodeId 
@@ -202,38 +176,37 @@ const createGraphSlice: StateCreator<CanvasState, [], [], GraphSlice> = (set, ge
 
   onNodesChange: (changes) => {
     set(state => {
-      // 1. Appliquer les changements standard (Move, Select, Remove)
       let nextNodes = applyNodeChanges(changes, state.nodes) as AppNode[];
       let nextEdges = state.edges;
       let nextSequences = state.sequences;
 
-      // 2. Gestion spécifique de la suppression (Nettoyage en cascade)
       const removedNodeIds = changes.filter(c => c.type === 'remove').map(c => c.id);
+      
       if (removedNodeIds.length > 0) {
-         // Supprimer les liens connectés
+         // Nettoyage en cascade des arêtes et des gammes
          nextEdges = state.edges.filter(edge => !removedNodeIds.includes(edge.source) && !removedNodeIds.includes(edge.target));
-         
-         // Nettoyer les séquences
          nextSequences = state.sequences.map(seq => ({
             ...seq,
             steps: seq.steps.filter(stepId => !removedNodeIds.includes(stepId))
          }));
 
-         // Nettoyer les références logiques dans les autres noeuds (ex: overflow vers un noeud supprimé)
+         // Nettoyage GÉNÉRIQUE des propriétés (évite les IDs orphelins dans les sélecteurs)
          nextNodes = nextNodes.map(node => {
-            const p = node.data.properties;
-            let dirty = false;
-            const newP = { ...p };
+            const props = node.data.properties || {};
+            let isDirty = false;
+            const updatedProps = { ...props };
 
-            if (removedNodeIds.includes(p.dumpingNetworkId || '')) { newP.dumpingNetworkId = null; dirty = true; }
-            if (removedNodeIds.includes(p.overflowNetworkId || '')) { newP.overflowNetworkId = null; dirty = true; }
-            if (removedNodeIds.includes(p.compensationSourceId || '')) { newP.compensationSourceId = null; dirty = true; }
-            
-            return dirty ? { ...node, data: { ...node.data, properties: newP } } : node;
+            Object.keys(updatedProps).forEach(key => {
+                if (typeof updatedProps[key] === 'string' && removedNodeIds.includes(updatedProps[key])) {
+                    updatedProps[key] = null;
+                    isDirty = true;
+                }
+            });
+            return isDirty ? { ...node, data: { ...node.data, properties: updatedProps } } : node;
          });
       }
 
-      // 3. Gestion de la sélection
+      // Gestion de la sélection mutuellement exclusive (Node OR Edge)
       let nextSelectedNodeId = state.selectedNodeId;
       if (changes.some(c => c.type === 'select')) {
          const newlySelected = nextNodes.find(n => n.selected);
@@ -247,7 +220,6 @@ const createGraphSlice: StateCreator<CanvasState, [], [], GraphSlice> = (set, ge
           edges: nextEdges, 
           sequences: nextSequences, 
           selectedNodeId: nextSelectedNodeId, 
-          // Si on sélectionne un noeud, on désélectionne l'arête
           selectedEdgeId: nextSelectedNodeId ? null : state.selectedEdgeId 
       };
     });
@@ -256,13 +228,11 @@ const createGraphSlice: StateCreator<CanvasState, [], [], GraphSlice> = (set, ge
   onEdgesChange: (changes) => {
     set(state => {
       const nextEdges = applyEdgeChanges(changes, state.edges);
-      
       let nextSelectedEdgeId = state.selectedEdgeId;
       if (changes.some(c => c.type === 'select')) {
          const selectedEdge = nextEdges.find(e => e.selected);
          nextSelectedEdgeId = selectedEdge ? selectedEdge.id : null;
       }
-
       return { 
           edges: nextEdges, 
           selectedEdgeId: nextSelectedEdgeId,
@@ -275,8 +245,8 @@ const createGraphSlice: StateCreator<CanvasState, [], [], GraphSlice> = (set, ge
     edges: addEdge({ 
         ...connection, 
         id: crypto.randomUUID(), 
-        type: 'default', // ou 'step' selon le style
-        data: { flowRate: 0 } 
+        type: 'default', 
+        data: {} 
     }, state.edges)
   })),
 });
@@ -287,21 +257,25 @@ const createSequenceSlice: StateCreator<CanvasState, [], [], SequenceSlice> = (s
   setSequences: (sequences) => set({ sequences }),
   
   addSequence: async (name) => {
-    const lineId = get().lineId;
-    if (!lineId) return;
+    const systemId = get().systemId;
+    if (!systemId) return;
     
-    // Optimistic Update
+    const defaultProps = { cadence: 10, dragOut: 0.1 }; 
     const tempId = crypto.randomUUID();
-    const newSeqStub: AppSequence = { id: tempId, name, properties: { cadence: 10, dragOut: 0.1 }, steps: [] };
-    set(state => ({ sequences: [...state.sequences, newSeqStub] }));
-
-    // Server Call
-    const realSeq = await createSequenceAction(lineId, name, { cadence: 10, dragOut: 0.1 });
     
-    // Replace Stub
-    set(state => ({
-        sequences: state.sequences.map(s => s.id === tempId ? { ...s, id: realSeq.id } : s)
+    // Ajout optimiste
+    set(state => ({ 
+        sequences: [...state.sequences, { id: tempId, name, properties: defaultProps, steps: [] }] 
     }));
+
+    try {
+        const realSeq = await createSequenceAction(systemId, name, defaultProps);
+        set(state => ({
+            sequences: state.sequences.map(s => s.id === tempId ? { ...s, id: realSeq.id } : s)
+        }));
+    } catch (e) {
+        set(state => ({ sequences: state.sequences.filter(s => s.id !== tempId) }));
+    }
   },
 
   updateSequenceMeta: async (id, data) => {

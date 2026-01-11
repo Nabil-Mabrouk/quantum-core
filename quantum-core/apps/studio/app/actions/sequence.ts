@@ -4,12 +4,12 @@ import { db } from '@repo/database';
 import { revalidatePath } from 'next/cache';
 
 /**
- * Crée une nouvelle séquence (gamme) pour une ligne donnée.
+ * Crée une nouvelle séquence (gamme) pour un système donné.
  */
-export async function createSequenceAction(lineId: string, name: string, properties: Record<string, any>) {
+export async function createSequenceAction(systemId: string, name: string, properties: Record<string, any>) {
   const newSequence = await db.sequence.create({
     data: {
-      lineId,
+      systemId, // <--- Mise à jour : lineId devient systemId
       name,
       properties,
     }
@@ -49,7 +49,6 @@ export async function updateSequenceStepsAction(sequenceId: string, steps: strin
   ]);
   revalidatePath('/');
 }
-
 
 /**
  * Supprime une séquence.

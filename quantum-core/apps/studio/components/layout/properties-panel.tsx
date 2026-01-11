@@ -25,24 +25,28 @@ interface PropertiesPanelProps {
 }
 
 export function PropertiesPanel({ config }: PropertiesPanelProps) {
-  // 1. Récupération de l'état (Hooks optimisés)
+  // 1. DÉCLARATION DE TOUS LES HOOKS (Toujours en premier)
+  const viewMode = useCanvasStore(state => state.viewMode);
   const selectedNodeId = useCanvasStore(state => state.selectedNodeId);
   const selectedEdgeId = useCanvasStore(state => state.selectedEdgeId);
   const nodes = useCanvasStore(state => state.nodes);
   const edges = useCanvasStore(state => state.edges);
   
-  const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
-  const selectedEdge = selectedEdgeId ? edges.find(e => e.id === selectedEdgeId) : null;
-  
-  // Actions
   const updateNodeLabel = useCanvasStore(state => state.updateNodeLabel);
   const updateNodeProperties = useCanvasStore(state => state.updateNodeProperties);
   const updateEdgeProperties = useCanvasStore(state => state.updateEdgeProperties);
   const onNodesChange = useCanvasStore(state => state.onNodesChange);
   const onEdgesChange = useCanvasStore(state => state.onEdgesChange);
 
-  // --- CAS 1 : RIEN N'EST SÉLECTIONNÉ ---
-  // On affiche le "Panneau de Fond" du domaine (ex: Gestionnaire de Réseaux pour l'Eau)
+  // 2. CONDITION DE SORTIE PRÉCOCE (Après les hooks)
+  // Si on est en mode bilan, on libère l'espace latéral
+  if (viewMode === 'SUMMARY') return null;
+
+  // 3. LOGIQUE DE SÉLECTION
+  const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
+  const selectedEdge = selectedEdgeId ? edges.find(e => e.id === selectedEdgeId) : null;
+
+  // --- CAS : RIEN N'EST SÉLECTIONNÉ ---
   if (!selectedNode && !selectedEdge) {
     const EmptySelectionComponent = getDomainPanel(config.id, 'EMPTY_SELECTION');
 
@@ -68,20 +72,20 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
 
   // --- PRÉPARATION DES DONNÉES DE L'ÉLÉMENT ---
   const isNode = !!selectedNode;
-  const elementId = isNode ? selectedNode.id : selectedEdge.id;
+  const elementId = isNode ? selectedNode!.id : selectedEdge!.id;
   
   let schema: any = null;
   let properties: any = {};
   let label = "";
   let elementType = "";
 
-  if (isNode) {
-    elementType = selectedNode.type || selectedNode.data.type; 
+  if (isNode && selectedNode) {
+    elementType = selectedNode.type || (selectedNode.data as any).type; 
     schema = config.nodeTypes[elementType];
-    properties = selectedNode.data.properties || {};
-    label = selectedNode.data.label;
-  } else {
-    elementType = selectedEdge.data?.type || "PIPE"; 
+    properties = (selectedNode.data as any).properties || {};
+    label = (selectedNode.data as any).label;
+  } else if (selectedEdge) {
+    elementType = (selectedEdge.data as any)?.type || "PIPE"; 
     schema = config.edgeTypes[elementType] || config.edgeTypes["PIPE"];
     properties = selectedEdge.data || {};
     label = schema?.label || "Liaison";
@@ -93,11 +97,8 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
   };
 
   // --- RÉCUPÉRATION DES COMPOSANTS DOMAINE ---
-  // On demande au registre : "Existe-t-il un formulaire spécial pour ce type ?"
   const CustomForm = isNode ? getDomainForm(config.id, elementType) : null;
-  // On demande : "Existe-t-il un widget additionnel (ex: Bilan) ?"
   const CustomWidget = isNode ? getDomainWidget(config.id, elementType) : null;
-
 
   // --- HELPER RENDU CHAMPS STANDARDS ---
   const renderField = (field: any) => {
@@ -132,8 +133,6 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
 
   return (
     <ResizablePanel initialWidth={360}>
-      
-      {/* HEADER DE LA SÉLECTION */}
       <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-start shrink-0">
         <div>
           <div className={`flex items-center gap-2 mb-1 text-${schema?.color || 'slate-500'}`}>
@@ -147,7 +146,6 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
           </h3>
         </div>
         
-        {/* Bouton Supprimer */}
         <button 
           onClick={() => isNode ? onNodesChange([{ id: elementId, type: 'remove' }]) : onEdgesChange([{ id: elementId, type: 'remove' }])} 
           className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" 
@@ -158,8 +156,6 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-8">
-        
-        {/* 1. IDENTITÉ (NOM) */}
         {isNode && (
           <div className="space-y-2">
             <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1">
@@ -174,19 +170,15 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
           </div>
         )}
 
-        {/* 2. INJECTION DU WIDGET DOMAINE (Si présent) */}
         {CustomWidget && (
            <div className="border-b border-slate-100 pb-8">
               <CustomWidget nodeId={elementId} />
            </div>
         )}
 
-        {/* 3. FORMULAIRE DE PROPRIÉTÉS */}
         {CustomForm ? (
-            // A. Formulaire Spécifique Intelligent (ex: WaterTankForm)
             <CustomForm nodeId={elementId} />
         ) : (
-            // B. Formulaire Générique (Boucle sur les champs du JSON)
             <div className="space-y-4">
                 <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2 mb-2">
                     <FileText className="w-3 h-3" /> Caractéristiques
@@ -202,7 +194,6 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
                 )}
             </div>
         )}
-
       </div>
     </ResizablePanel>
   );

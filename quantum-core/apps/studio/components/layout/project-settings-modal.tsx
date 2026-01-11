@@ -8,9 +8,10 @@ import {
   Save, 
   Loader2, 
   RotateCw,
-  Settings // <--- L'IMPORT MANQUANT ÉTAIT ICI
+  Settings 
 } from 'lucide-react';
 import { updateProjectSettingsAction } from '@/app/actions/project';
+import { toast } from "sonner"; // <--- Import Sonner
 
 export function ProjectSettingsModal({ projectId, onClose }: { projectId: string, onClose: () => void }) {
   const [isSaving, setIsSaving] = useState(false);
@@ -26,13 +27,20 @@ export function ProjectSettingsModal({ projectId, onClose }: { projectId: string
     setIsSaving(true);
     try {
       await updateProjectSettingsAction(projectId, data);
-      setIsSaving(false);
+      
+      // Feedback visuel moderne
+      toast.success("Paramètres mis à jour", {
+        description: "Le régime temporel du projet a été sauvegardé."
+      });
+      
       onClose();
-      // Optionnel : refresh pour mettre à jour les calculs globaux
-      window.location.reload(); 
+      // Pas besoin de reload, Next.js met à jour les données via revalidatePath
     } catch (error) {
       console.error(error);
-      alert("Erreur lors de la sauvegarde");
+      toast.error("Erreur de sauvegarde", {
+        description: "Impossible de mettre à jour les paramètres."
+      });
+    } finally {
       setIsSaving(false);
     }
   };
