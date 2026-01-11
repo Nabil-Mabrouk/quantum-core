@@ -1,0 +1,193 @@
+[
+  { "name": "Pompe Centrifuge 15m3/h", "category": "PUMP", "properties": { "power": 1.5, "material": "PP", "unitPrice": 1250 } },
+  { "name": "Pompe Centrifuge 25m3/h", "category": "PUMP", "properties": { "power": 2.2, "material": "PVDF", "unitPrice": 1850 } },
+  { "name": "Pompe Doseuse 50L/h", "category": "PUMP", "properties": { "power": 0.1, "material": "PVDF", "unitPrice": 890 } },
+  { "name": "Pompe Doseuse 100L/h", "category": "PUMP", "properties": { "power": 0.25, "material": "PTFE", "unitPrice": 1250 } },
+  { "name": "Pompe Diaphragme 10m3/h", "category": "PUMP", "properties": { "power": 1.1, "material": "PP", "unitPrice": 2100 } },
+  { "name": "Pompe À Cavités Progressives 5m3/h", "category": "PUMP", "properties": { "power": 0.75, "material": "Acier Inoxydable", "unitPrice": 3200 } },
+  { "name": "Pompe À Vide 100m3/h", "category": "PUMP", "properties": { "power": 4.0, "material": "Fonte", "unitPrice": 4500 } },
+  { "name": "Capteur Conductivité", "category": "SENSOR", "properties": { "precision": 0.1, "unitPrice": 450 } },
+  { "name": "Capteur pH", "category": "SENSOR", "properties": { "precision": 0.01, "unitPrice": 380 } },
+  { "name": "Capteur ORP", "category": "SENSOR", "properties": { "precision": 1, "unitPrice": 420 } },
+  { "name": "Débitmètre Magnétique DN50", "category": "SENSOR", "properties": { "precision": 0.5, "unitPrice": 1650 } },
+  { "name": "Capteur Pression 0-10bar", "category": "SENSOR", "properties": { "precision": 0.1, "unitPrice": 180 } },
+  { "name": "Capteur Température PT100", "category": "SENSOR", "properties": { "precision": 0.1, "unitPrice": 95 } },
+  { "name": "Capteur Niveau Ultrason", "category": "SENSOR", "properties": { "precision": 1, "unitPrice": 750 } },
+  { "name": "Membrane OI 8040", "category": "SPARE", "properties": { "type": "BW", "unitPrice": 600 } },
+  { "name": "Membrane OI 4040", "category": "SPARE", "properties": { "type": "BW", "unitPrice": 280 } },
+  { "name": "Membrane UF 8 pouces", "category": "SPARE", "properties": { "type": "UF-PVDF", "unitPrice": 1200 } },
+  { "name": "Cartouche Filtrante 20 pouces", "category": "SPARE", "properties": { "filtration": "5 microns", "unitPrice": 15 } },
+  { "name": "Sac Filtrant 7# PP", "category": "SPARE", "properties": { "filtration": "50 microns", "unitPrice": 8 } },
+  { "name": "Résine Échangeuse Cationique", "category": "SPARE", "properties": { "type": "Fortement Acide", "unitPrice": 85 } },
+  { "name": "Résine Échangeuse Anionique", "category": "SPARE", "properties": { "type": "Fortement Basique", "unitPrice": 95 } },
+  { "name": "Résine Mixte", "category": "SPARE", "properties": { "type": "Polissage", "unitPrice": 125 } },
+  { "name": "Lampe UV 40W", "category": "SPARE", "properties": { "power": 40, "unitPrice": 185 } },
+  { "name": "Filtre Presse 1m2", "category": "EQUIPMENT", "properties": { "area": 1, "material": "PP", "unitPrice": 8500 } },
+  { "name": "Épaississeur 3m Diamètre", "category": "EQUIPMENT", "properties": { "diameter": 3, "material": "PE", "unitPrice": 12500 } },
+  { "name": "Sécheur À Bande 2m", "category": "EQUIPMENT", "properties": { "width": 2, "power": 7.5, "unitPrice": 45000 } },
+  { "name": "Buffleur D'air Roots 100m3/h", "category": "EQUIPMENT", "properties": { "flow": 100, "power": 5.5, "unitPrice": 6800 } },
+  { "name": "Compresseur Air 500L/min", "category": "EQUIPMENT", "properties": { "flow": 500, "power": 4, "unitPrice": 3200 } },
+  { "name": "Agitateur Mécanique 0.75kW", "category": "EQUIPMENT", "properties": { "power": 0.75, "material": "PP", "unitPrice": 2100 } },
+  { "name": "Vanne Papillon DN80", "category": "VALVE", "properties": { "diameter": 80, "material": "PVC", "unitPrice": 280 } },
+  { "name": "Vanne À Bille DN50", "category": "VALVE", "properties": { "diameter": 50, "material": "PP", "unitPrice": 95 } },
+  { "name": "Vanne Diaphragme DN40", "category": "VALVE", "properties": { "diameter": 40, "material": "EPDM", "unitPrice": 180 } },
+  { "name": "Vanne De Regulation DN25", "category": "VALVE", "properties": { "diameter": 25, "material": "PVDF", "unitPrice": 450 } },
+  { "name": "Cuve Stockage 10m3 PP", "category": "TANK", "properties": { "volume": 10, "material": "PP", "unitPrice": 4500 } },
+  { "name": "Cuve De Traitement 5m3 PVDF", "category": "TANK", "properties": { "volume": 5, "material": "PVDF", "unitPrice": 8500 } },
+  { "name": "Cuve Jour 1m3 PE", "category": "TANK", "properties": { "volume": 1, "material": "PE", "unitPrice": 850 } },
+  { "name": "Bâche De Rétention 20m3", "category": "TANK", "properties": { "volume": 20, "material": "PVC", "unitPrice": 2200 } },
+  {
+    "name": "Skid Osmose Inverse 5m3/h",
+    "category": "SKID",
+    "properties": { "totalPower": 7.5, "automation": "Siemens", "unitPrice": 28000 },
+    "composition": [
+      { "childName": "Pompe Centrifuge 15m3/h", "quantity": 1 },
+      { "childName": "Membrane OI 8040", "quantity": 6 },
+      { "childName": "Capteur Conductivité", "quantity": 2 },
+      { "childName": "Capteur Pression 0-10bar", "quantity": 4 },
+      { "childName": "Débitmètre Magnétique DN50", "quantity": 1 },
+      { "childName": "Vanne Papillon DN80", "quantity": 3 },
+      { "childName": "Cuve Stockage 10m3 PP", "quantity": 1 },
+      { "childName": "Pompe Doseuse 50L/h", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Skid EDI 2m3/h",
+    "category": "SKID",
+    "properties": { "totalPower": 3.5, "automation": "Siemens", "unitPrice": 45000 },
+    "composition": [
+      { "childName": "Pompe Centrifuge 15m3/h", "quantity": 1 },
+      { "childName": "Résine Mixte", "quantity": 150 },
+      { "childName": "Capteur Conductivité", "quantity": 2 },
+      { "childName": "Capteur Pression 0-10bar", "quantity": 2 },
+      { "childName": "Vanne À Bille DN50", "quantity": 4 }
+    ]
+  },
+  {
+    "name": "Skid UF 10m3/h",
+    "category": "SKID",
+    "properties": { "totalPower": 5.5, "automation": "Schneider", "unitPrice": 35000 },
+    "composition": [
+      { "childName": "Pompe Centrifuge 25m3/h", "quantity": 1 },
+      { "childName": "Membrane UF 8 pouces", "quantity": 4 },
+      { "childName": "Capteur Pression 0-10bar", "quantity": 3 },
+      { "childName": "Débitmètre Magnétique DN50", "quantity": 1 },
+      { "childName": "Vanne De Regulation DN25", "quantity": 2 }
+    ]
+  },
+  {
+    "name": "Station De Neutralisation 20m3/h",
+    "category": "SKID",
+    "properties": { "totalPower": 4.0, "automation": "Siemens", "unitPrice": 55000 },
+    "composition": [
+      { "childName": "Pompe Centrifuge 15m3/h", "quantity": 2 },
+      { "childName": "Pompe Doseuse 100L/h", "quantity": 2 },
+      { "childName": "Capteur pH", "quantity": 3 },
+      { "childName": "Capteur ORP", "quantity": 1 },
+      { "childName": "Agitateur Mécanique 0.75kW", "quantity": 2 },
+      { "childName": "Cuve De Traitement 5m3 PVDF", "quantity": 3 },
+      { "childName": "Vanne À Bille DN50", "quantity": 8 }
+    ]
+  },
+  {
+    "name": "Ligne De Décyanuration",
+    "category": "SKID",
+    "properties": { "totalPower": 6.0, "automation": "Siemens", "unitPrice": 78000 },
+    "composition": [
+      { "childName": "Pompe Diaphragme 10m3/h", "quantity": 2 },
+      { "childName": "Pompe Doseuse 50L/h", "quantity": 3 },
+      { "childName": "Capteur ORP", "quantity": 2 },
+      { "childName": "Cuve De Traitement 5m3 PVDF", "quantity": 2 },
+      { "childName": "Agitateur Mécanique 0.75kW", "quantity": 2 },
+      { "childName": "Vanne Diaphragme DN40", "quantity": 6 }
+    ]
+  },
+  {
+    "name": "Système De Délutation 3m3/h",
+    "category": "SKID",
+    "properties": { "totalPower": 3.0, "automation": "Schneider", "unitPrice": 22000 },
+    "composition": [
+      { "childName": "Pompe Doseuse 100L/h", "quantity": 2 },
+      { "childName": "Cuve Jour 1m3 PE", "quantity": 3 },
+      { "childName": "Agitateur Mécanique 0.75kW", "quantity": 1 },
+      { "childName": "Capteur Niveau Ultrason", "quantity": 3 }
+    ]
+  },
+  {
+    "name": "Filtre Multimédia DN1200",
+    "category": "EQUIPMENT",
+    "properties": { "diameter": 1200, "material": "Acier Epoxy", "unitPrice": 12500 },
+    "composition": [
+      { "childName": "Vanne Papillon DN80", "quantity": 4 },
+      { "childName": "Capteur Pression 0-10bar", "quantity": 2 }
+    ]
+  },
+  {
+    "name": "Charbon Actif DN1000",
+    "category": "EQUIPMENT",
+    "properties": { "diameter": 1000, "material": "Acier Epoxy", "unitPrice": 9800 },
+    "composition": [
+      { "childName": "Vanne Papillon DN80", "quantity": 3 },
+      { "childName": "Capteur Pression 0-10bar", "quantity": 2 }
+    ]
+  },
+  {
+    "name": "Système UV 30m3/h",
+    "category": "EQUIPMENT",
+    "properties": { "power": 3.0, "flow": 30, "unitPrice": 12500 },
+    "composition": [
+      { "childName": "Lampe UV 40W", "quantity": 12 },
+      { "childName": "Capteur Température PT100", "quantity": 1 },
+      { "childName": "Débitmètre Magnétique DN50", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Evapo-Concentrateur 500L/h",
+    "category": "EVAPORATOR",
+    "properties": { "energy": "Steam", "unitPrice": 145000 },
+    "composition": [
+      { "childName": "Pompe Centrifuge 15m3/h", "quantity": 2 },
+      { "childName": "Capteur Température PT100", "quantity": 3 },
+      { "childName": "Capteur Pression 0-10bar", "quantity": 4 },
+      { "childName": "Vanne De Regulation DN25", "quantity": 2 }
+    ]
+  },
+  {
+    "name": "Échangeur Thermique 50kW",
+    "category": "EQUIPMENT",
+    "properties": { "power": 50, "material": "Titane", "unitPrice": 8500 },
+    "composition": [
+      { "childName": "Capteur Température PT100", "quantity": 2 },
+      { "childName": "Vanne De Regulation DN25", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Système De Dosage Acide 100L/h",
+    "category": "SKID",
+    "properties": { "totalPower": 1.5, "automation": "Local", "unitPrice": 18500 },
+    "composition": [
+      { "childName": "Pompe Doseuse 100L/h", "quantity": 1 },
+      { "childName": "Cuve Jour 1m3 PE", "quantity": 1 },
+      { "childName": "Capteur Niveau Ultrason", "quantity": 1 },
+      { "childName": "Vanne À Bille DN50", "quantity": 2 }
+    ]
+  },
+  {
+    "name": "Colonne EDI 30L",
+    "category": "EQUIPMENT",
+    "properties": { "volume": 30, "material": "FRP", "unitPrice": 4500 },
+    "composition": [
+      { "childName": "Résine Mixte", "quantity": 25 },
+      { "childName": "Capteur Conductivité", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Surpresseur Air 8bar",
+    "category": "EQUIPMENT",
+    "properties": { "pressure": 8, "flow": 200, "unitPrice": 2800 },
+    "composition": [
+      { "childName": "Compresseur Air 500L/min", "quantity": 1 },
+      { "childName": "Capteur Pression 0-10bar", "quantity": 1 }
+    ]
+  }
+]

@@ -4,9 +4,10 @@ import { Beaker, Zap, Boxes, Cylinder, Droplets, Fan, LucideIcon } from 'lucide-
 export type FieldDefinition = {
   id: string;
   label: string;
-  type: 'number' | 'string' | 'select';
+  type: 'number' | 'string' | 'boolean' | 'select' | 'quantity'; // Ajout de quantity
+  unitFamily?: 'length' | 'flow' | 'temperature' | 'mass'; // Pour les conversions
   unit?: string;
-  options?: string[]; // Pour les select
+  options?: string[];
   default?: any;
 };
 
@@ -29,54 +30,19 @@ export type EdgeSchema = {
   fields: FieldDefinition[];
 };
 
+// Type de bibliothèque
+export type LibraryDefinition = {
+  id: string;
+  label: string;
+  iconName: string; // Nom de l'icône Lucide
+  type: 'COMPOUND' | 'SIMPLE'; // COMPOUND = A une composition (Chimie), SIMPLE = Juste des props (Pompes)
+  categories: string[]; // Les catégories en base de données (ex: ["PUMP", "TANK"] ou ["REAGENT"])
+};
+
 export type DomainManifest = {
   id: string;
   name: string;
+  libraries: LibraryDefinition[];
   nodeTypes: Record<string, NodeSchema>; // "TANK": { ... }
   edgeTypes: Record<string, EdgeSchema>;
 };
-
-// 2. Configuration Concrète : "WATER" (QuantumH2O)
-// C'est ici que vous configurez le métier.
-
-export const WATER_CONFIG: DomainManifest = {
-  id: "WATER",
-  name: "Traitement de Surface",
-  nodeTypes: {
-    TANK: {
-      id: "TANK",
-      label: "Cuve Process",
-      icon: Beaker,
-      color: "blue-500",
-      description: "Bain actif contenant la chimie",
-      fields: [
-        { id: "volume", label: "Volume", type: "number", unit: "L", default: 1000 },
-        { id: "temp", label: "Température", type: "number", unit: "°C", default: 20 },
-        { id: "material", label: "Matériau", type: "select", options: ["PP", "Inox", "PVDF"], default: "PP" }
-        ]
-    },
-    PUMP: {
-      id: "PUMP",
-      label: "Pompe",
-      icon: Fan, // Faute de mieux pour l'instant
-      color: "slate-500",
-      description: "Organe de transfert hydraulique",
-      fields: [
-        { id: "flow", label: "Débit Nominal", type: "number", unit: "m3/h", default: 10 }
-    ]
-    },
-  },
-  edgeTypes: {
-    PIPE: {
-      id: "PIPE",
-      label: "Tuyauterie",
-      color: "blue-400",
-      fields: [
-        { id: "flowRate", label: "Débit circulant", type: "number", unit: "m³/h", default: 0 },
-      ]
-    }
-  }
-};
-
-// Helper pour récupérer la config active (Pour l'instant hardcodé sur WATER)
-export const currentConfig = WATER_CONFIG;

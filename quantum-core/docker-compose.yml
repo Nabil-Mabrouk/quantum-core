@@ -21,7 +21,7 @@ services:
     volumes:
       - ./apps/engine:/app
     environment:
-      - INTERNAL_API_SECRET=super-secret-quantum-key-2026
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
       - PYTHONUNBUFFERED=1
 
   # 3. Studio (Next.js)

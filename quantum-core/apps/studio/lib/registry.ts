@@ -1,14 +1,13 @@
+import { DomainManifest } from './domain-config';
 import { WATER_CONFIG } from './domains/water';
+// import { ENERGY_CONFIG } from './domains/energy'; // Plus tard
 
-export const DOMAIN_REGISTRY = {
+const DOMAIN_REGISTRY: Record<string, DomainManifest> = {
   WATER: WATER_CONFIG,
-  // ENERGY: ENERGY_CONFIG (Futur)
+  // ENERGY: ENERGY_CONFIG,
 };
 
-export type DomainId = keyof typeof DOMAIN_REGISTRY;
-
-export function getDomainConfig() {
-  // On lit le domaine depuis la variable d'environnement
-  const activeDomain = process.env.NEXT_PUBLIC_ACTIVE_DOMAIN as DomainId;
+export function getDomainConfig(): DomainManifest {
+  const activeDomain = process.env.NEXT_PUBLIC_ACTIVE_DOMAIN || "WATER";
   return DOMAIN_REGISTRY[activeDomain] || WATER_CONFIG;
 }

@@ -2,139 +2,262 @@
 
 import { db } from '@repo/database';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
-// --- GESTION DES UNITÉS DE BASE (ex: Ions) ---
-export async function upsertBaseUnit(domain: string, data: any) {
-  const { id, name, symbol, properties } = data;
-  await db.baseUnit.upsert({
-    where: { id: id || 'new_id' },
-    update: { name, symbol, properties },
-    create: { name, symbol, properties, domain }
+// --- ACTIONS DE RÉCUPÉRATION ---
+
+export async function getLibrary(domain: string) {
+  const allItems = await db.libraryItem.findMany({
+    where: { domain },
+    include: {
+      components: {
+        include: { child: true }
+      }
+    },
+    orderBy: { name: 'asc' }
   });
-  revalidatePath('/library');
+
+  return allItems;
 }
 
-// --- GESTION DES ARTICLES (ex: Produits Chimiques) ---
-export async function upsertReferenceItem(domain: string, data: any) {
-  const { id, name, category, properties, composition } = data;
+// --- ACTIONS DE MODIFICATION ---
+
+export async function upsertLibraryItem(domain: string, data: any) {
+  // DÉPLACEMENT DU SCHÉMA A L'INTÉRIEUR DE LA FONCTION
+  const LibraryItemSchema = z.object({
+    id: z.string().optional().nullable(),
+    name: z.string().min(1),
+    category: z.string(),
+    symbol: z.string().optional().nullable(),
+    properties: z.record(z.any()).default({}),
+    composition: z.array(z.object({
+      childId: z.string(),
+      quantity: z.number(),
+      unit: z.string().optional().nullable(),
+    })).optional(),
+  });
+
+  const validated = LibraryItemSchema.parse(data);
+  const { id, name, category, symbol, properties, composition } = validated;
 
   return await db.$transaction(async (tx) => {
-    const item = await tx.referenceItem.upsert({
-      where: { id: id || 'new_item' },
-      update: { name, category, properties },
-      create: { name, category, properties, domain }
+    // 1. Upsert de l'item principal
+    const item = await tx.libraryItem.upsert({
+      where: { name: name },
+      update: {
+        category,
+        symbol,
+        properties: properties || {},
+        domain,
+      },
+      create: {
+        domain,
+        name,
+        category,
+        symbol,
+        properties: properties || {},
+        sourceType: 'MANUAL',
+      }
     });
 
-    // Mise à jour de la composition (Dissociation)
-    await tx.itemComposition.deleteMany({ where: { referenceItemId: item.id } });
-    
-    if (composition && composition.length > 0) {
-      await tx.itemComposition.createMany({
-        data: composition.map((c: any) => ({
-          referenceItemId: item.id,
-          baseUnitId: c.baseUnitId,
-          coefficient: parseFloat(c.coefficient)
-        }))
-      });
+    // 2. Mise à jour de la nomenclature
+    if (composition !== undefined) {
+      await tx.composition.deleteMany({ where: { parentId: item.id } });
+
+      if (composition.length > 0) {
+        await tx.composition.createMany({
+          data: composition.map(c => ({
+            parentId: item.id,
+            childId: c.childId,
+            quantity: c.quantity,
+            unit: c.unit
+          }))
+        });
+      }
     }
+
+    revalidatePath('/library');
     return item;
   });
 }
 
-export async function getLibrary(domain: string) {
-  const baseUnits = await db.baseUnit.findMany({ where: { domain } });
-  const referenceItems = await db.referenceItem.findMany({
-    where: { domain },
-    include: { composition: { include: { baseUnit: true } } }
-  });
-  return { baseUnits, referenceItems };
+export async function deleteLibraryItem(id: string) {
+  const usageCount = await db.composition.count({ where: { childId: id } });
+  if (usageCount > 0) {
+    throw new Error(`Cet élément est utilisé comme composant dans ${usageCount} autre(s) article(s). Supprimez les liens d'abord.`);
+  }
+
+  await db.libraryItem.delete({ where: { id } });
+  revalidatePath('/library');
+  return { success: true };
 }
 
+// --- LOGIQUE D'IMPORTATION INTELLIGENTE ---
 
+export async function importLibraryAction(domain: string, jsonData: any) {
+  // DÉPLACEMENT DU SCHÉMA A L'INTÉRIEUR DE LA FONCTION (CRUCIAL POUR TURBOPACK)
+  const JSONImportSchema = z.array(z.object({
+    name: z.string().min(1),
+    category: z.string(),
+    symbol: z.string().optional().nullable(),
+    properties: z.record(z.any()).optional().default({}),
+    composition: z.array(z.object({
+      childName: z.string(),
+      quantity: z.number(),
+      unit: z.string().optional().nullable()
+    })).optional()
+  }));
 
-export async function importLibraryJson(domain: string, jsonData: any) {
+  // Parsing sécurisé
+  const validation = JSONImportSchema.safeParse(jsonData);
+  
+  if (!validation.success) {
+    console.error("Zod Validation Error:", validation.error.format());
+    return { success: false, error: "Format JSON invalide : " + validation.error.message };
+  }
+
+  const items = validation.data;
+
   try {
     await db.$transaction(async (tx) => {
-      // 1. Import des Unités de Base (Ions)
-      if (jsonData.ions) {
-        for (const ion of jsonData.ions) {
-          await tx.baseUnit.upsert({
-            where: { id: ion.symbol || ion.name }, // On utilise le symbole comme identifiant
-            update: { 
-              name: ion.name, 
-              symbol: ion.symbol, 
-              properties: { molarMass: ion.molarMass, charge: ion.charge } 
-            },
-            create: { 
-              id: ion.symbol || ion.name,
-              domain,
-              name: ion.name, 
-              symbol: ion.symbol, 
-              properties: { molarMass: ion.molarMass, charge: ion.charge } 
-            }
-          });
-        }
+      // PASSE 1 : Items
+      for (const item of items) {
+        await tx.libraryItem.upsert({
+          where: { name: item.name },
+          update: {
+            category: item.category,
+            symbol: item.symbol,
+            properties: item.properties
+          },
+          create: {
+            domain,
+            name: item.name,
+            category: item.category,
+            symbol: item.symbol,
+            properties: item.properties,
+            sourceType: 'JSON_IMPORT'
+          }
+        });
       }
 
-      // 2. Import des Articles de Référence (Produits)
-      if (jsonData.products) {
-        for (const prod of jsonData.products) {
-          const item = await tx.referenceItem.upsert({
-            where: { name: prod.name },
-            update: { 
-              category: "REAGENT", 
-              properties: { density: prod.density, purity: prod.purity, fds: prod.fds } 
-            },
-            create: { 
-              domain,
-              name: prod.name, 
-              category: "REAGENT", 
-              properties: { density: prod.density, purity: prod.purity, fds: prod.fds } 
-            }
-          });
+      // PASSE 2 : Liens
+      for (const item of items) {
+        if (item.composition && item.composition.length > 0) {
+          const parent = await tx.libraryItem.findUnique({ where: { name: item.name } });
+          if (!parent) continue;
 
-          // Nettoyage de l'ancienne composition
-          await tx.itemComposition.deleteMany({ where: { referenceItemId: item.id } });
+          await tx.composition.deleteMany({ where: { parentId: parent.id } });
 
-          // Création de la nouvelle composition (Liens vers les BaseUnits créés juste avant)
-          if (prod.composition) {
-            for (const comp of prod.composition) {
-              const baseUnit = await tx.baseUnit.findFirst({ 
-                where: { symbol: comp.ionSymbol, domain } 
+          for (const comp of item.composition) {
+            const child = await tx.libraryItem.findUnique({ where: { name: comp.childName } });
+            if (child) {
+              await tx.composition.create({
+                data: {
+                  parentId: parent.id,
+                  childId: child.id,
+                  quantity: comp.quantity,
+                  unit: comp.unit
+                }
               });
-              
-              if (baseUnit) {
-                await tx.itemComposition.create({
-                  data: {
-                    referenceItemId: item.id,
-                    baseUnitId: baseUnit.id,
-                    coefficient: comp.coefficient
-                  }
-                });
-              }
             }
           }
         }
       }
-    });
+    }, { timeout: 30000 });
 
     revalidatePath('/library');
-    return { success: true };
-  } catch (error) {
-    console.error(error);
-    return { success: false, error: "Erreur lors de l'import" };
+    return { success: true, count: items.length };
+  } catch (e: any) {
+    console.error("Database Transaction Error:", e);
+    return { success: false, error: e.message };
   }
 }
 
+// --- UTILITAIRES DE CALCUL (PERFORMANCE) ---
+// --- UTILITAIRES DE CALCUL SÉCURISÉS ---
 
+/**
+ * Aplatit récursivement une structure BOM avec Protection Anti-Boucle
+ */
+export async function getFlattenedComposition(itemId: string): Promise<Record<string, number>> {
+  const totals: Record<string, number> = {};
+  const MAX_DEPTH = 20; // Sécurité pour éviter une explosion de la pile
 
+  async function resolve(currentId: string, multiplier: number, depth: number, path: Set<string>) {
+    // 1. Protection Profondeur
+    if (depth > MAX_DEPTH) {
+      console.warn(`[BOM] Profondeur max atteinte pour l'item ${currentId}. Arrêt.`);
+      return;
+    }
 
+    // 2. Protection Cyclique (Le serpent qui se mord la queue)
+    if (path.has(currentId)) {
+      throw new Error(`Boucle infinie détectée dans la nomenclature (Circular Dependency) sur l'item : ${currentId}`);
+    }
 
+    const item = await db.libraryItem.findUnique({
+      where: { id: currentId },
+      include: { components: true }
+    });
 
-export async function getWaterLibrary() {
-  return await db.referenceItem.findMany({
-    where: { domain: "WATER" },
-    include: { composition: { include: { baseUnit: true } } }
-  });
+    if (!item) return;
+
+    if (item.components.length === 0) {
+      // Élément atomique (Feuille)
+      totals[item.name] = (totals[item.name] || 0) + multiplier;
+    } else {
+      // Élément composite (Branche)
+      // On ajoute l'ID courant au chemin pour les enfants
+      const newPath = new Set(path);
+      newPath.add(currentId);
+
+      for (const comp of item.components) {
+        await resolve(comp.childId, multiplier * comp.quantity, depth + 1, newPath);
+      }
+    }
+  }
+
+  // Démarrage avec un chemin vide et profondeur 0
+  await resolve(itemId, 1, 0, new Set());
+  return totals;
 }
 
+/**
+ * EXPORT JSON
+ * Génère un dump complet de la bibliothèque compatible avec l'import
+ */
+/**
+ * EXPORT JSON (Avec filtre optionnel)
+ * categories: tableau de strings (ex: ['PUMP', 'TANK']) ou null pour tout exporter
+ */
+export async function exportLibraryData(domain: string, categories?: string[]) {
+  // Construction du filtre dynamique
+  const whereCondition: any = { domain };
+  
+  if (categories && categories.length > 0) {
+    whereCondition.category = { in: categories };
+  }
+
+  const items = await db.libraryItem.findMany({
+    where: whereCondition,
+    include: {
+      components: {
+        include: { child: true }
+      }
+    },
+    orderBy: { name: 'asc' }
+  });
+
+  // Transformation (Nettoyage pour JSON portable)
+  return items.map(item => ({
+    name: item.name,
+    category: item.category,
+    symbol: item.symbol,
+    properties: item.properties,
+    composition: item.components.map(c => ({
+      childName: c.child.name,
+      quantity: c.quantity,
+      unit: c.unit
+    }))
+  }));
+}

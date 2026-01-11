@@ -1,0 +1,351 @@
+[
+  { "name": "Proton", "category": "ION", "symbol": "H+", "properties": { "molarMass": 1.008, "charge": 1 } },
+  { "name": "Hydroxyde", "category": "ION", "symbol": "OH-", "properties": { "molarMass": 17.007, "charge": -1 } },
+  { "name": "Sodium", "category": "ION", "symbol": "Na+", "properties": { "molarMass": 22.99, "charge": 1 } },
+  { "name": "Sulfate", "category": "ION", "symbol": "SO4--", "properties": { "molarMass": 96.06, "charge": -2 } },
+  { "name": "Chlorure", "category": "ION", "symbol": "Cl-", "properties": { "molarMass": 35.45, "charge": -1 } },
+  { "name": "Nickel", "category": "ION", "symbol": "Ni++", "properties": { "molarMass": 58.69, "charge": 2 } },
+  { "name": "Zinc", "category": "ION", "symbol": "Zn++", "properties": { "molarMass": 65.38, "charge": 2 } },
+  { "name": "Potassium", "category": "ION", "symbol": "K+", "properties": { "molarMass": 39.1, "charge": 1 } },
+  { "name": "Ammonium", "category": "ION", "symbol": "NH4+", "properties": { "molarMass": 18.04, "charge": 1 } },
+  { "name": "Fer(II)", "category": "ION", "symbol": "Fe++", "properties": { "molarMass": 55.85, "charge": 2 } },
+  { "name": "Fer(III)", "category": "ION", "symbol": "Fe+++", "properties": { "molarMass": 55.85, "charge": 3 } },
+  { "name": "Cuivre(II)", "category": "ION", "symbol": "Cu++", "properties": { "molarMass": 63.55, "charge": 2 } },
+  { "name": "Chrome(III)", "category": "ION", "symbol": "Cr+++", "properties": { "molarMass": 52.0, "charge": 3 } },
+  { "name": "Chromate", "category": "ION", "symbol": "CrO4--", "properties": { "molarMass": 116.0, "charge": -2 } },
+  { "name": "Dichromate", "category": "ION", "symbol": "Cr2O7--", "properties": { "molarMass": 216.0, "charge": -2 } },
+  { "name": "Aluminium", "category": "ION", "symbol": "Al+++", "properties": { "molarMass": 26.98, "charge": 3 } },
+  { "name": "Calcium", "category": "ION", "symbol": "Ca++", "properties": { "molarMass": 40.08, "charge": 2 } },
+  { "name": "Magnésium", "category": "ION", "symbol": "Mg++", "properties": { "molarMass": 24.31, "charge": 2 } },
+  { "name": "Etain(II)", "category": "ION", "symbol": "Sn++", "properties": { "molarMass": 118.71, "charge": 2 } },
+  { "name": "Plomb(II)", "category": "ION", "symbol": "Pb++", "properties": { "molarMass": 207.2, "charge": 2 } },
+  { "name": "Argent", "category": "ION", "symbol": "Ag+", "properties": { "molarMass": 107.87, "charge": 1 } },
+  { "name": "Or(III)", "category": "ION", "symbol": "Au+++", "properties": { "molarMass": 196.97, "charge": 3 } },
+  { "name": "Nitrate", "category": "ION", "symbol": "NO3-", "properties": { "molarMass": 62.0, "charge": -1 } },
+  { "name": "Phosphate", "category": "ION", "symbol": "PO4---", "properties": { "molarMass": 94.97, "charge": -3 } },
+  { "name": "Hydrogénophosphate", "category": "ION", "symbol": "HPO4--", "properties": { "molarMass": 95.98, "charge": -2 } },
+  { "name": "Dihydrogénophosphate", "category": "ION", "symbol": "H2PO4-", "properties": { "molarMass": 96.99, "charge": -1 } },
+  { "name": "Fluorure", "category": "ION", "symbol": "F-", "properties": { "molarMass": 19.0, "charge": -1 } },
+  { "name": "Cyanure", "category": "ION", "symbol": "CN-", "properties": { "molarMass": 26.02, "charge": -1 } },
+  { "name": "Carbonate", "category": "ION", "symbol": "CO3--", "properties": { "molarMass": 60.01, "charge": -2 } },
+  { "name": "Acétate", "category": "ION", "symbol": "C2H3O2-", "properties": { "molarMass": 59.04, "charge": -1 } },
+  { "name": "Permanganate", "category": "ION", "symbol": "MnO4-", "properties": { "molarMass": 118.94, "charge": -1 } },
+  { "name": "Bicarbonate", "category": "ION", "symbol": "HCO3-", "properties": { "molarMass": 61.02, "charge": -1 } },
+  { "name": "Métasilicate", "category": "ION", "symbol": "SiO3--", "properties": { "molarMass": 76.09, "charge": -2 } },
+  { "name": "Borate", "category": "ION", "symbol": "BO3---", "properties": { "molarMass": 58.81, "charge": -3 } },
+  {
+    "name": "Acide Sulfurique 98%",
+    "category": "REAGENT",
+    "properties": { "density": 1.84, "purity": 98, "unitPrice": 0.85 },
+    "composition": [
+      { "childName": "Proton", "quantity": 2 },
+      { "childName": "Sulfate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Soude Caustique 30%",
+    "category": "REAGENT",
+    "properties": { "density": 1.33, "purity": 30, "unitPrice": 0.45 },
+    "composition": [
+      { "childName": "Sodium", "quantity": 1 },
+      { "childName": "Hydroxyde", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Chlorure de Nickel",
+    "category": "REAGENT",
+    "properties": { "density": 1.92, "purity": 100, "unitPrice": 12.5 },
+    "composition": [
+      { "childName": "Nickel", "quantity": 1 },
+      { "childName": "Chlorure", "quantity": 2 }
+    ]
+  },
+  {
+    "name": "Acide Chlorhydrique 37%",
+    "category": "REAGENT",
+    "properties": { "density": 1.19, "purity": 37, "unitPrice": 0.32 },
+    "composition": [
+      { "childName": "Proton", "quantity": 1 },
+      { "childName": "Chlorure", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Acide Nitrique 65%",
+    "category": "REAGENT",
+    "properties": { "density": 1.4, "purity": 65, "unitPrice": 0.58 },
+    "composition": [
+      { "childName": "Proton", "quantity": 1 },
+      { "childName": "Nitrate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Acide Fluorhydrique 49%",
+    "category": "REAGENT",
+    "properties": { "density": 1.17, "purity": 49, "unitPrice": 1.25 },
+    "composition": [
+      { "childName": "Proton", "quantity": 1 },
+      { "childName": "Fluorure", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Acide Phosphorique 85%",
+    "category": "REAGENT",
+    "properties": { "density": 1.68, "purity": 85, "unitPrice": 0.88 },
+    "composition": [
+      { "childName": "Proton", "quantity": 3 },
+      { "childName": "Phosphate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Acide Chromique",
+    "category": "REAGENT",
+    "properties": { "density": 2.7, "purity": 100, "unitPrice": 2.45 },
+    "composition": [
+      { "childName": "Proton", "quantity": 2 },
+      { "childName": "Chromate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Soude Caustique 50%",
+    "category": "REAGENT",
+    "properties": { "density": 1.52, "purity": 50, "unitPrice": 0.52 },
+    "composition": [
+      { "childName": "Sodium", "quantity": 1 },
+      { "childName": "Hydroxyde", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Potasse Caustique 50%",
+    "category": "REAGENT",
+    "properties": { "density": 1.51, "purity": 50, "unitPrice": 0.65 },
+    "composition": [
+      { "childName": "Potassium", "quantity": 1 },
+      { "childName": "Hydroxyde", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Ammoniaque 28%",
+    "category": "REAGENT",
+    "properties": { "density": 0.9, "purity": 28, "unitPrice": 0.28 },
+    "composition": [
+      { "childName": "Ammonium", "quantity": 1 },
+      { "childName": "Hydroxyde", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Carbonate de Sodium",
+    "category": "REAGENT",
+    "properties": { "density": 2.54, "purity": 100, "unitPrice": 0.35 },
+    "composition": [
+      { "childName": "Sodium", "quantity": 2 },
+      { "childName": "Carbonate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Phosphate Trisodique",
+    "category": "REAGENT",
+    "properties": { "density": 1.62, "purity": 100, "unitPrice": 0.78 },
+    "composition": [
+      { "childName": "Sodium", "quantity": 3 },
+      { "childName": "Phosphate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Dichromate de Sodium",
+    "category": "REAGENT",
+    "properties": { "density": 2.35, "purity": 100, "unitPrice": 2.8 },
+    "composition": [
+      { "childName": "Sodium", "quantity": 2 },
+      { "childName": "Dichromate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Chlorure de Zinc",
+    "category": "REAGENT",
+    "properties": { "density": 2.91, "purity": 100, "unitPrice": 1.15 },
+    "composition": [
+      { "childName": "Zinc", "quantity": 1 },
+      { "childName": "Chlorure", "quantity": 2 }
+    ]
+  },
+  {
+    "name": "Sulfate de Zinc",
+    "category": "REAGENT",
+    "properties": { "density": 3.54, "purity": 100, "unitPrice": 0.95 },
+    "composition": [
+      { "childName": "Zinc", "quantity": 1 },
+      { "childName": "Sulfate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Sulfate de Cuivre",
+    "category": "REAGENT",
+    "properties": { "density": 3.6, "purity": 100, "unitPrice": 2.2 },
+    "composition": [
+      { "childName": "Cuivre(II)", "quantity": 1 },
+      { "childName": "Sulfate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Chlorure d'Etain(II)",
+    "category": "REAGENT",
+    "properties": { "density": 3.95, "purity": 100, "unitPrice": 4.5 },
+    "composition": [
+      { "childName": "Etain(II)", "quantity": 1 },
+      { "childName": "Chlorure", "quantity": 2 }
+    ]
+  },
+  {
+    "name": "Sulfate de Nickel",
+    "category": "REAGENT",
+    "properties": { "density": 3.68, "purity": 100, "unitPrice": 8.75 },
+    "composition": [
+      { "childName": "Nickel", "quantity": 1 },
+      { "childName": "Sulfate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Chlorure de Fer(III)",
+    "category": "REAGENT",
+    "properties": { "density": 2.9, "purity": 100, "unitPrice": 0.85 },
+    "composition": [
+      { "childName": "Fer(III)", "quantity": 1 },
+      { "childName": "Chlorure", "quantity": 3 }
+    ]
+  },
+  {
+    "name": "Sulfate d'Aluminium",
+    "category": "REAGENT",
+    "properties": { "density": 2.71, "purity": 100, "unitPrice": 0.55 },
+    "composition": [
+      { "childName": "Aluminium", "quantity": 2 },
+      { "childName": "Sulfate", "quantity": 3 }
+    ]
+  },
+  {
+    "name": "Chlorure de Calcium",
+    "category": "REAGENT",
+    "properties": { "density": 2.15, "purity": 100, "unitPrice": 0.28 },
+    "composition": [
+      { "childName": "Calcium", "quantity": 1 },
+      { "childName": "Chlorure", "quantity": 2 }
+    ]
+  },
+  {
+    "name": "Sulfate de Magnésium",
+    "category": "REAGENT",
+    "properties": { "density": 2.66, "purity": 100, "unitPrice": 0.42 },
+    "composition": [
+      { "childName": "Magnésium", "quantity": 1 },
+      { "childName": "Sulfate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Nitrate de Plomb",
+    "category": "REAGENT",
+    "properties": { "density": 4.53, "purity": 100, "unitPrice": 2.9 },
+    "composition": [
+      { "childName": "Plomb(II)", "quantity": 1 },
+      { "childName": "Nitrate", "quantity": 2 }
+    ]
+  },
+  {
+    "name": "Nitrate d'Argent",
+    "category": "REAGENT",
+    "properties": { "density": 4.35, "purity": 100, "unitPrice": 450.0 },
+    "composition": [
+      { "childName": "Argent", "quantity": 1 },
+      { "childName": "Nitrate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Chlorure d'Or(III)",
+    "category": "REAGENT",
+    "properties": { "density": 4.7, "purity": 100, "unitPrice": 3800.0 },
+    "composition": [
+      { "childName": "Or(III)", "quantity": 1 },
+      { "childName": "Chlorure", "quantity": 3 }
+    ]
+  },
+  {
+    "name": "Cyanure de Sodium",
+    "category": "REAGENT",
+    "properties": { "density": 1.6, "purity": 100, "unitPrice": 1.85 },
+    "composition": [
+      { "childName": "Sodium", "quantity": 1 },
+      { "childName": "Cyanure", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Permanganate de Potassium",
+    "category": "REAGENT",
+    "properties": { "density": 2.7, "purity": 100, "unitPrice": 3.2 },
+    "composition": [
+      { "childName": "Potassium", "quantity": 1 },
+      { "childName": "Permanganate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Chlorure d'Ammonium",
+    "category": "REAGENT",
+    "properties": { "density": 1.53, "purity": 100, "unitPrice": 0.35 },
+    "composition": [
+      { "childName": "Ammonium", "quantity": 1 },
+      { "childName": "Chlorure", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Bicarbonate de Sodium",
+    "category": "REAGENT",
+    "properties": { "density": 2.2, "purity": 100, "unitPrice": 0.45 },
+    "composition": [
+      { "childName": "Sodium", "quantity": 1 },
+      { "childName": "Bicarbonate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Métasilicate de Sodium",
+    "category": "REAGENT",
+    "properties": { "density": 2.4, "purity": 100, "unitPrice": 0.72 },
+    "composition": [
+      { "childName": "Sodium", "quantity": 2 },
+      { "childName": "Métasilicate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Acide Borique",
+    "category": "REAGENT",
+    "properties": { "density": 1.44, "purity": 100, "unitPrice": 0.95 },
+    "composition": [
+      { "childName": "Proton", "quantity": 3 },
+      { "childName": "Borate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Chlorure de Potassium",
+    "category": "REAGENT",
+    "properties": { "density": 1.98, "purity": 100, "unitPrice": 0.58 },
+    "composition": [
+      { "childName": "Potassium", "quantity": 1 },
+      { "childName": "Chlorure", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Sulfate de Fer(II)",
+    "category": "REAGENT",
+    "properties": { "density": 2.84, "purity": 100, "unitPrice": 0.48 },
+    "composition": [
+      { "childName": "Fer(II)", "quantity": 1 },
+      { "childName": "Sulfate", "quantity": 1 }
+    ]
+  },
+  {
+    "name": "Acétate de Sodium",
+    "category": "REAGENT",
+    "properties": { "density": 1.53, "purity": 100, "unitPrice": 0.65 },
+    "composition": [
+      { "childName": "Sodium", "quantity": 1 },
+      { "childName": "Acétate", "quantity": 1 }
+    ]
+  }
+]

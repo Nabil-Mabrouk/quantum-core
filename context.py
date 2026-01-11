@@ -4,7 +4,7 @@ import os
 # Directories to completely ignore
 IGNORE_DIRS = {
     'node_modules', '.next', '.venv', '.git', '.vincent', 
-    'dist', 'build', '__pycache__', '.vscode', 'book', 'docs', 'ressources'
+    'dist', 'build', '__pycache__', '.vscode', 'Book', 'docs', 'ressources'
 }
 
 # Specific files to ignore (like heavy lock files)

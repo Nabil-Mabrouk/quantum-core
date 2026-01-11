@@ -27,3 +27,42 @@ export async function createProjectAction(formData: FormData) {
   revalidatePath('/dashboard');
   redirect(`/editor/${project.id}`);
 }
+
+export async function deleteProjectAction(projectId: string) {
+    const session = await auth();
+    // Seul le propriétaire peut supprimer
+    await db.project.delete({
+      where: { id: projectId, userId: session.user.id }
+    });
+    revalidatePath('/dashboard');
+  }
+  
+  export async function renameProjectAction(projectId: string, newName: string) {
+    await db.project.update({
+      where: { id: projectId },
+      data: { name: newName }
+    });
+    revalidatePath('/dashboard');
+  }
+  
+  export async function shareProjectAction(projectId: string, email: string) {
+    const targetUser = await db.user.findUnique({ where: { email } });
+    if (!targetUser) return { error: "Utilisateur non trouvé" };
+  
+    await db.projectCollaborator.create({
+      data: { projectId, userId: targetUser.id, role: "EDITOR" }
+    });
+    return { success: true };
+  }
+
+  export async function updateProjectSettingsAction(projectId: string, data: any) {
+  await db.project.update({
+    where: { id: projectId },
+    data: {
+      hoursPerDay: parseFloat(data.hoursPerDay),
+      daysPerWeek: parseFloat(data.daysPerWeek),
+      weeksPerYear: parseFloat(data.weeksPerYear),
+    }
+  });
+  revalidatePath('/editor/[id]', 'page'); // Revalider le layout éditeur
+}

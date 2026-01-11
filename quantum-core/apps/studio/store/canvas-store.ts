@@ -1,243 +1,336 @@
-import { create } from 'zustand';
+import { create, StateCreator } from 'zustand';
 import { 
   addEdge, applyNodeChanges, applyEdgeChanges,
-  Connection, Edge, EdgeChange, NodeChange,
-  OnNodesChange, OnEdgesChange, OnConnect
+  Edge, EdgeChange, NodeChange, Node,
+  OnNodesChange, OnEdgesChange, OnConnect,
+  Connection
 } from '@xyflow/react';
 import { getDomainConfig } from '@/lib/registry';
-import { 
-  createSequenceAction, 
-  deleteSequenceAction 
-} from '@/app/actions/sequence';
+import { createSequenceAction, deleteSequenceAction, updateSequenceMetaAction, updateSequenceStepsAction } from '@/app/actions/sequence';
 
-// --- TYPES ---
-export type AppNodeData = {
-  type: string; 
+// --- DEFINITION DES TYPES ---
+
+// Propriétés génériques d'un noeud métier
+export interface NodeProperties {
+  type?: string;
   label?: string;
-  role?: string;
-  properties?: Record<string, any>;
-};
+  // Champs spécifiques Eau
+  volume?: number;
+  temp?: number;
+  evapAuto?: boolean;
+  evaporationRate?: number;
+  inletAuto?: boolean;
+  inletFlow?: number;
+  inletType?: 'CLEAN_WATER' | 'CASCADE';
+  
+  // Champs spécifiques Logiciel / Connexions
+  dumpingNetworkId?: string | null;
+  overflowNetworkId?: string | null;
+  compensationSourceId?: string | null;
+  
+  // Résultats de simulation (Non persisté ou optionnel)
+  simulationResults?: {
+    concentrations?: Record<string, number>;
+    warnings?: Array<{ severity: 'CRITICAL'|'WARNING', message: string }>;
+    flow?: number;
+    evaporation?: number;
+    chemicalAddition?: number;
+  };
 
-export type AppNode = any; // Simplifié pour la compatibilité React Flow
+  // Extension libre (JsonB)
+  [key: string]: any; 
+}
 
-export type AppSequence = {
+// Structure de données interne de React Flow
+export interface AppNodeData extends Record<string, unknown> {
+  type: string;
+  label: string;
+  role: 'PROCESS' | 'SOURCE' | 'SINK';
+  properties: NodeProperties;
+}
+
+export type AppNode = Node<AppNodeData>;
+
+export interface AppSequence {
   id: string;
   name: string;
-  properties: Record<string, any>;
-  steps: string[];
-};
+  properties: {
+    cadence?: number;
+    dragOut?: number;
+    [key: string]: any;
+  };
+  steps: string[]; // Liste d'IDs de noeuds
+}
 
-interface CanvasState {
-  nodes: AppNode[];
-  edges: Edge[];
+// --- SLICES DU STORE ---
+
+interface WorkspaceSlice {
   projectId: string | null;
   lineId: string | null;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
+  viewMode: 'GRAPH' | 'SYNOPTIC' | 'SUMMARY';
+  summaryData: any | null;
+  
+  setProjectId: (id: string) => void;
+  setLineId: (id: string) => void;
+  setSelectedNodeId: (id: string | null) => void;
+  setSelectedEdgeId: (id: string | null) => void;
+  setViewMode: (mode: 'GRAPH' | 'SYNOPTIC' | 'SUMMARY') => void;
+  setSummaryData: (data: any | null) => void;
+}
+
+interface GraphSlice {
+  nodes: AppNode[];
+  edges: Edge[];
+  
+  setGraph: (nodes: AppNode[], edges: Edge[]) => void;
+  addNode: (type: string, position: { x: number, y: number }) => void;
+  
+  // Mise à jour partielle (Patch) des propriétés
+  updateNodeProperties: (nodeId: string, properties: Partial<NodeProperties>) => void;
+  updateNodeLabel: (nodeId: string, label: string) => void;
+  updateEdgeProperties: (edgeId: string, properties: any) => void;
+  
+  onNodesChange: OnNodesChange<AppNode>;
+  onEdgesChange: OnEdgesChange;
+  onConnect: OnConnect;
+}
+
+interface SequenceSlice {
   sequences: AppSequence[];
   selectedSequenceId: string | null;
   
-  // Actions d'initialisation (Hydratation)
-  setProjectId: (id: string) => void; // <--- RÉPARÉ ICI
-  setLineId: (id: string) => void;
-  setGraph: (nodes: AppNode[], edges: Edge[]) => void;
   setSequences: (seqs: AppSequence[]) => void;
-  
-  // Actions Canvas
-  addNode: (type: string, position: { x: number, y: number }) => void;
-  updateNodeProperties: (nodeId: string, properties: any) => void;
-  updateEdgeProperties: (edgeId: string, properties: any) => void;
-  setSelectedNodeId: (id: string | null) => void;
-  setSelectedEdgeId: (id: string | null) => void;
-  onNodesChange: OnNodesChange;
-  onEdgesChange: OnEdgesChange;
-  onConnect: OnConnect;
-  
-  // Actions Séquences (Gammes)
   addSequence: (name: string) => Promise<void>;
-  updateSequenceMeta: (id: string, data: { name?: string; properties?: any; }) => Promise<void>;
+  updateSequenceMeta: (id: string, data: { name?: string; properties?: any }) => Promise<void>;
   updateSequenceSteps: (id: string, steps: string[]) => Promise<void>;
   removeSequence: (id: string) => Promise<void>;
   setSelectedSequenceId: (id: string | null) => void;
 }
 
-export const useCanvasStore = create<CanvasState>((set, get) => ({
-  nodes: [],
-  edges: [],
+type CanvasState = WorkspaceSlice & GraphSlice & SequenceSlice;
+
+// --- IMPLEMENTATION ---
+
+const createWorkspaceSlice: StateCreator<CanvasState, [], [], WorkspaceSlice> = (set) => ({
   projectId: null,
   lineId: null,
   selectedNodeId: null,
   selectedEdgeId: null,
-  sequences: [],
-  selectedSequenceId: null,
-
-  // --- ACTIONS D'INITIALISATION ---
+  viewMode: 'GRAPH',
+  summaryData: null,
   setProjectId: (id) => set({ projectId: id }),
   setLineId: (id) => set({ lineId: id }),
-  setGraph: (nodes, edges) => set({ nodes, edges }),
-  setSequences: (sequences) => set({ sequences }),
+  setSelectedNodeId: (id) => set({ selectedNodeId: id, selectedEdgeId: null }),
+  setSelectedEdgeId: (id) => set({ selectedEdgeId: id, selectedNodeId: null }),
+  setViewMode: (mode) => set({ viewMode: mode }),
+  setSummaryData: (data) => set({ summaryData: data }),
+});
 
-  // --- ACTIONS CANVAS ---
+const createGraphSlice: StateCreator<CanvasState, [], [], GraphSlice> = (set, get) => ({
+  nodes: [],
+  edges: [],
+  setGraph: (nodes, edges) => set({ nodes, edges }),
+
   addNode: (type, position) => {
     const config = getDomainConfig();
     const nodeSchema = config.nodeTypes[type];
     
-    const initialProps = nodeSchema?.fields?.reduce((acc: any, f: any) => {
+    // Valeurs par défaut depuis le schéma
+    const initialProps: NodeProperties = nodeSchema?.fields?.reduce((acc: any, f: any) => {
       acc[f.id] = f.default;
       return acc;
     }, {}) || {};
 
-    const newNode = {
+    const newNode: AppNode = {
       id: crypto.randomUUID(),
-      type: 'genericNode',
+      type: type,
       position,
-      data: { 
-        type, 
-        label: `Nouveau ${nodeSchema?.label || type}`, 
-        properties: initialProps,
-        role: nodeSchema?.role || 'PROCESS'
+      data: {
+        type,
+        label: `Nouveau ${nodeSchema?.label || type}`,
+        role: (nodeSchema?.role as any) || 'PROCESS',
+        properties: initialProps
       },
     };
-    set({ nodes: [...get().nodes, newNode] });
+
+    set({ 
+        nodes: [...get().nodes, newNode], 
+        selectedNodeId: newNode.id, 
+        selectedEdgeId: null 
+    });
   },
 
-  updateNodeProperties: (nodeId, props) => {
-    set({
-      nodes: get().nodes.map(n => 
+  updateNodeProperties: async (nodeId, props) => {
+    set(state => ({
+      nodes: state.nodes.map(n => 
         n.id === nodeId 
-          ? { ...n, data: { ...n.data, properties: { ...(n.data.properties || {}), ...props } } }
+          ? { ...n, data: { ...n.data, properties: { ...n.data.properties, ...props } } }
           : n
       )
-    });
+    }));
+
+    // Trigger Simulation Locale (Optionnel / Background)
+    const node = get().nodes.find(n => n.id === nodeId);
+    if (node) {
+        const config = getDomainConfig();
+        // Dynamique import pour éviter circular dependency
+        const { evaluateNodeAction } = await import('@/app/actions/simulation');
+        const result = await evaluateNodeAction(config.id, node.type!, node.data.properties);
+        
+        // Update avec résultat calculé
+        set(state => ({
+            nodes: state.nodes.map(n => 
+                n.id === nodeId 
+                ? { ...n, data: { ...n.data, properties: { ...n.data.properties, computed: result.computed } } }
+                : n
+            )
+        }));
+    }
   },
 
-  updateEdgeProperties: (edgeId, props) => {
-    set({
-      edges: get().edges.map(e => 
-        e.id === edgeId ? { ...e, data: { ...(e.data || {}), ...props } } : e
-      )
-    });
-  },
+  updateNodeLabel: (nodeId, label) => set(state => ({
+    nodes: state.nodes.map(n => n.id === nodeId ? { ...n, data: { ...n.data, label } } : n)
+  })),
 
-  setSelectedNodeId: (id) => set({ selectedNodeId: id, selectedEdgeId: null }),
-  setSelectedEdgeId: (id) => set({ selectedEdgeId: id, selectedNodeId: null }),
+  updateEdgeProperties: (edgeId, props) => set(state => ({
+    edges: state.edges.map(e => 
+      e.id === edgeId ? { ...e, data: { ...e.data, ...props } } : e
+    )
+  })),
 
-  onNodesChange: (changes: NodeChange[]) => {
-  set(state => {
-    // 1. Identify the IDs of nodes that are being removed
-    const removedNodeIds = changes
-      .filter(c => c.type === 'remove')
-      .map(c => c.id);
-
-    let nextEdges = state.edges;
-    let nextSequences = state.sequences;
-
-    if (removedNodeIds.length > 0) {
-      // 2. Clean up EDGES: Remove orphaned connections
-      nextEdges = state.edges.filter(
-        edge => !removedNodeIds.includes(edge.source) && !removedNodeIds.includes(edge.target)
-      );
-
-      // 3. Clean up SEQUENCES: Remove steps pointing to deleted nodes
-      nextSequences = state.sequences.map(seq => ({
-        ...seq,
-        steps: seq.steps.filter(nodeId => !removedNodeIds.includes(nodeId))
-      }));
-    }
-
-    // 4. Apply the original changes to the nodes
-    const nextNodes = applyNodeChanges(changes, state.nodes) as AppNode[];
-    
-    // 5. Handle selection state robustly
-    let nextSelectedNodeId = state.selectedNodeId;
-    const hasSelectionChange = changes.some(c => c.type === 'select');
-
-    if (hasSelectionChange) {
-      const newlySelectedNode = nextNodes.find(n => n.selected);
-      nextSelectedNodeId = newlySelectedNode ? newlySelectedNode.id : null;
-    }
-
-    return { 
-      nodes: nextNodes,
-      edges: nextEdges,
-      sequences: nextSequences,
-      selectedNodeId: nextSelectedNodeId,
-      // If a node is now selected, deselect any edge
-      selectedEdgeId: nextSelectedNodeId ? null : state.selectedEdgeId
-    };
-  });
-},
-
-  onEdgesChange: (changes: EdgeChange[]) => {
+  onNodesChange: (changes) => {
     set(state => {
-      const nextEdges = applyEdgeChanges(changes, state.edges);
+      // 1. Appliquer les changements standard (Move, Select, Remove)
+      let nextNodes = applyNodeChanges(changes, state.nodes) as AppNode[];
+      let nextEdges = state.edges;
+      let nextSequences = state.sequences;
 
-      let nextSelectedEdgeId = state.selectedEdgeId;
-      const hasSelectionChange = changes.some(c => c.type === 'select');
+      // 2. Gestion spécifique de la suppression (Nettoyage en cascade)
+      const removedNodeIds = changes.filter(c => c.type === 'remove').map(c => c.id);
+      if (removedNodeIds.length > 0) {
+         // Supprimer les liens connectés
+         nextEdges = state.edges.filter(edge => !removedNodeIds.includes(edge.source) && !removedNodeIds.includes(edge.target));
+         
+         // Nettoyer les séquences
+         nextSequences = state.sequences.map(seq => ({
+            ...seq,
+            steps: seq.steps.filter(stepId => !removedNodeIds.includes(stepId))
+         }));
 
-      if (hasSelectionChange) {
-        const newlySelectedEdge = nextEdges.find(e => e.selected);
-        nextSelectedEdgeId = newlySelectedEdge ? newlySelectedEdge.id : null;
+         // Nettoyer les références logiques dans les autres noeuds (ex: overflow vers un noeud supprimé)
+         nextNodes = nextNodes.map(node => {
+            const p = node.data.properties;
+            let dirty = false;
+            const newP = { ...p };
+
+            if (removedNodeIds.includes(p.dumpingNetworkId || '')) { newP.dumpingNetworkId = null; dirty = true; }
+            if (removedNodeIds.includes(p.overflowNetworkId || '')) { newP.overflowNetworkId = null; dirty = true; }
+            if (removedNodeIds.includes(p.compensationSourceId || '')) { newP.compensationSourceId = null; dirty = true; }
+            
+            return dirty ? { ...node, data: { ...node.data, properties: newP } } : node;
+         });
       }
-      
-      return {
-        edges: nextEdges,
-        selectedEdgeId: nextSelectedEdgeId,
-        // If an edge is now selected, deselect any node
-        selectedNodeId: nextSelectedEdgeId ? null : state.selectedNodeId
+
+      // 3. Gestion de la sélection
+      let nextSelectedNodeId = state.selectedNodeId;
+      if (changes.some(c => c.type === 'select')) {
+         const newlySelected = nextNodes.find(n => n.selected);
+         nextSelectedNodeId = newlySelected ? newlySelected.id : null;
+      } else if (removedNodeIds.includes(state.selectedNodeId || '')) {
+         nextSelectedNodeId = null;
+      }
+
+      return { 
+          nodes: nextNodes, 
+          edges: nextEdges, 
+          sequences: nextSequences, 
+          selectedNodeId: nextSelectedNodeId, 
+          // Si on sélectionne un noeud, on désélectionne l'arête
+          selectedEdgeId: nextSelectedNodeId ? null : state.selectedEdgeId 
       };
     });
   },
 
-  onConnect: (connection) => {
-    const newEdge = { 
-        ...connection, 
-        id: crypto.randomUUID(), 
-        data: { flowRate: 0 } 
-    };
-    set({ edges: addEdge(newEdge, get().edges) });
+  onEdgesChange: (changes) => {
+    set(state => {
+      const nextEdges = applyEdgeChanges(changes, state.edges);
+      
+      let nextSelectedEdgeId = state.selectedEdgeId;
+      if (changes.some(c => c.type === 'select')) {
+         const selectedEdge = nextEdges.find(e => e.selected);
+         nextSelectedEdgeId = selectedEdge ? selectedEdge.id : null;
+      }
+
+      return { 
+          edges: nextEdges, 
+          selectedEdgeId: nextSelectedEdgeId,
+          selectedNodeId: nextSelectedEdgeId ? null : state.selectedNodeId
+      };
+    });
   },
 
-  // --- ACTIONS SÉQUENCES ---
+  onConnect: (connection: Connection) => set(state => ({
+    edges: addEdge({ 
+        ...connection, 
+        id: crypto.randomUUID(), 
+        type: 'default', // ou 'step' selon le style
+        data: { flowRate: 0 } 
+    }, state.edges)
+  })),
+});
+
+const createSequenceSlice: StateCreator<CanvasState, [], [], SequenceSlice> = (set, get) => ({
+  sequences: [],
+  selectedSequenceId: null,
+  setSequences: (sequences) => set({ sequences }),
+  
   addSequence: async (name) => {
     const lineId = get().lineId;
     if (!lineId) return;
-    // On appelle l'action serveur
-    const newSeq = await createSequenceAction(lineId, name, { cadence: 10, dragOut: 0.1 });
-    // On met à jour l'UI immédiatement
-    set({ sequences: [...get().sequences, {
-        id: newSeq.id,
-        name: newSeq.name,
-        properties: newSeq.properties as any,
-        steps: []
-    }] });
+    
+    // Optimistic Update
+    const tempId = crypto.randomUUID();
+    const newSeqStub: AppSequence = { id: tempId, name, properties: { cadence: 10, dragOut: 0.1 }, steps: [] };
+    set(state => ({ sequences: [...state.sequences, newSeqStub] }));
+
+    // Server Call
+    const realSeq = await createSequenceAction(lineId, name, { cadence: 10, dragOut: 0.1 });
+    
+    // Replace Stub
+    set(state => ({
+        sequences: state.sequences.map(s => s.id === tempId ? { ...s, id: realSeq.id } : s)
+    }));
   },
 
   updateSequenceMeta: async (id, data) => {
-    // On peut faire l'update local d'abord pour la fluidité (Optimistic UI)
-    set({
-        sequences: get().sequences.map(s => s.id === id ? { ...s, ...data } : s)
-    });
-    // On persiste
-    const { updateSequenceMetaAction } = await import('@/app/actions/sequence');
+    set(state => ({
+        sequences: state.sequences.map(s => s.id === id ? { ...s, ...data } : s)
+    }));
     await updateSequenceMetaAction(id, data);
   },
 
   updateSequenceSteps: async (id, steps) => {
-    set({
-        sequences: get().sequences.map(s => s.id === id ? { ...s, steps } : s)
-    });
-    const { updateSequenceStepsAction } = await import('@/app/actions/sequence');
+    set(state => ({
+        sequences: state.sequences.map(s => s.id === id ? { ...s, steps } : s)
+    }));
     await updateSequenceStepsAction(id, steps);
   },
 
   removeSequence: async (id) => {
+    set(state => ({
+        sequences: state.sequences.filter(s => s.id !== id),
+        selectedSequenceId: state.selectedSequenceId === id ? null : state.selectedSequenceId
+    }));
     await deleteSequenceAction(id);
-    set({ 
-        sequences: get().sequences.filter(s => s.id !== id),
-        selectedSequenceId: get().selectedSequenceId === id ? null : get().selectedSequenceId
-    });
   },
 
   setSelectedSequenceId: (id) => set({ selectedSequenceId: id }),
+});
+
+export const useCanvasStore = create<CanvasState>()((...a) => ({
+  ...createWorkspaceSlice(...a),
+  ...createGraphSlice(...a),
+  ...createSequenceSlice(...a),
 }));

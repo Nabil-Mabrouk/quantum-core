@@ -1,7 +1,20 @@
 @import "tailwindcss";
-html, body, #__next {
+@plugin "@tailwindcss/typography";
+
+/* On définit la base sans bloquer le scroll globalement */
+html, body {
   height: 100%;
-  width: 100%;
   margin: 0;
-  overflow: hidden; /* Important pour une app "Full Screen" */
+  padding: 0;
+  /* Supprimez overflow: hidden ici ! */
+}
+
+/* On s'assure que Next.js prend toute la hauteur */
+#__next {
+  height: 100%;
+}
+@layer components {
+  .prop-input {
+    @apply w-full p-2.5 bg-white border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all;
+  }
 }

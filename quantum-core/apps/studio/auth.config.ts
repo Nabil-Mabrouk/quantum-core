@@ -6,30 +6,34 @@ export const authConfig = {
     signIn: "/login",
   },
   callbacks: {
-    authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user;
-      const isOnDashboard = nextUrl.pathname.startsWith("/dashboard") || nextUrl.pathname.startsWith("/editor");
-      
-      if (isOnDashboard) {
-        if (isLoggedIn) return true;
-        return false; // Redirige vers /login
-      }
-      return true;
-    },
+    // 1. On ajoute le rôle au JWT lors de la connexion
     async jwt({ token, user }: any) {
       if (user) {
-        token.id = user.id;
         token.role = user.role;
+        token.id = user.id;
       }
       return token;
     },
+    // 2. On transmet le rôle du JWT vers la session accessible par le Middleware/UI
     async session({ session, token }: any) {
       if (token && session.user) {
         session.user.id = token.id;
-        session.user.role = token.role;
+        session.user.role = token.role; // <--- CRUCIAL
       }
       return session;
     },
+    authorized({ auth, request: { nextUrl } }) {
+      const isLoggedIn = !!auth?.user;
+      const isAdminRoute = nextUrl.pathname.startsWith("/admin");
+      
+      // Si on tente d'aller sur /admin...
+      if (isAdminRoute) {
+        // @ts-ignore
+        if (isLoggedIn && auth.user.role === "ADMIN") return true;
+        return false; // Bloque et redirige
+      }
+      return true;
+    },
   },
-  providers: [], // Les providers sont ajoutés dans auth.ts
+  providers: [], 
 } satisfies NextAuthConfig;

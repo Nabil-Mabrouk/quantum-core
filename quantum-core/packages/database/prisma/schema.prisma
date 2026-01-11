@@ -21,30 +21,31 @@ model User {
   emailVerified DateTime? // <--- REQUIS pour les liens magiques
   image         String?
   role          UserRole  @default(USER)
-  
+  lastLogin     DateTime? @default(now())
+
   // Relations requises pour Auth.js
-  accounts      Account[]
-  sessions      Session[]
-  
-  projects      Project[]
-  posts         Post[]
-  createdAt     DateTime  @default(now())
+  accounts Account[]
+  sessions Session[]
+
+  projects       Project[] // Projets dont je suis propriétaire
+  collaborations ProjectCollaborator[] // Projets partagés avec moi
+  posts          Post[]
+  createdAt      DateTime              @default(now())
 }
 
-
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?  @db.Text
-  access_token       String?  @db.Text
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?  @db.Text
-  session_state      String?
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -74,12 +75,18 @@ model Post {
   id        String   @id @default(cuid())
   domain    String
   title     String
-  slug      String   @unique
+  slug      String // Pas de @unique ici si tu as @@unique en bas
+  excerpt   String?  @db.Text
   content   String   @db.Text
+  published Boolean  @default(false)
+  image     String?
+  tags      String?
   authorId  String
   author    User     @relation(fields: [authorId], references: [id])
   createdAt DateTime @default(now())
-  @@unique([domain, slug])
+  updatedAt DateTime @updatedAt
+
+  @@unique([domain, slug]) // C'est cette ligne qui crée la clé "domain_slug"
 }
 
 model Lead {
@@ -94,26 +101,32 @@ model Lead {
 // 3. HIERARCHIE PROJET
 // ==========================================
 model Project {
-  id     String @id @default(cuid())
-  name   String
-  domain String
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lines  Line[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String                @id @default(cuid())
+  name          String
+  domain        String
+  userId        String
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lines         Line[]
+  // --- NOUVEAUX CHAMPS (Quantum-H2O Parity) ---
+  hoursPerDay   Float                 @default(8)
+  daysPerWeek   Float                 @default(5)
+  weeksPerYear  Float                 @default(47)
+  currency      String                @default("EUR")
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  collaborators ProjectCollaborator[]
 }
 
 model Line {
-  id        String @id @default(cuid())
+  id        String     @id @default(cuid())
   name      String
   projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   nodes     Node[]
   edges     Edge[]
   sequences Sequence[]
-  createdAt DateTime @default(now()) // Utile
-  updatedAt DateTime @updatedAt       // Utile
+  createdAt DateTime   @default(now()) // Utile
+  updatedAt DateTime   @updatedAt // Utile
 }
 
 // ==========================================
@@ -126,19 +139,19 @@ enum NodeRole {
 }
 
 model Node {
-  id          String   @id @default(cuid())
-  lineId      String
-  line        Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
-  role        NodeRole @default(PROCESS)
-  type        String
-  label       String
-  properties  Json     @db.JsonB
-  positionX   Float
-  positionY   Float
-  inputs      Edge[]   @relation("EdgeTarget")
-  outputs     Edge[]   @relation("EdgeSource")
-  components  NodeComponent[]
-  steps       SequenceStep[]
+  id         String          @id @default(cuid())
+  lineId     String
+  line       Line            @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  role       NodeRole        @default(PROCESS)
+  type       String
+  label      String
+  properties Json            @db.JsonB
+  positionX  Float
+  positionY  Float
+  inputs     Edge[]          @relation("EdgeTarget")
+  outputs    Edge[]          @relation("EdgeSource")
+  components NodeComponent[]
+  steps      SequenceStep[]
 }
 
 model Edge {
@@ -157,16 +170,16 @@ model Edge {
 // 5. LOGIQUE SEQUENTIELLE (GAMMES)
 // ==========================================
 model Sequence {
-  id     String @id @default(cuid())
-  name   String
-  lineId String
-  line   Line   @relation(fields: [lineId], references: [id], onDelete: Cascade)
-  properties Json @db.JsonB
-  steps  SequenceStep[]
+  id         String         @id @default(cuid())
+  name       String
+  lineId     String
+  line       Line           @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  properties Json           @db.JsonB
+  steps      SequenceStep[]
 }
 
 model SequenceStep {
-  id         String @id @default(cuid())
+  id         String   @id @default(cuid())
   order      Int
   sequenceId String
   sequence   Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
@@ -177,48 +190,103 @@ model SequenceStep {
 // ==========================================
 // 6. BIBLIOTHÈQUE GÉNÉRIQUE
 // ==========================================
-model BaseUnit {
-  id         String @id @default(cuid())
-  domain     String
-  name       String
-  symbol     String?
-  properties Json   @db.JsonB
-  compositions ItemComposition[]
-  targets      NodeComponent[] @relation("TargetUnit")
-}
-
-model ReferenceItem {
-  id         String @id @default(cuid())
-  domain     String
-  category   String
-  name       String @unique
-  properties Json   @db.JsonB
-  composition ItemComposition[]
-  usages      NodeComponent[]
-}
-
-model ItemComposition {
-  id              String        @id @default(cuid())
-  referenceItemId String
-  referenceItem   ReferenceItem @relation(fields: [referenceItemId], references: [id], onDelete: Cascade)
-  baseUnitId      String
-  baseUnit        BaseUnit      @relation(fields: [baseUnitId], references: [id], onDelete: Cascade)
-  coefficient     Float
-}
 
 enum TargetType {
   ARTICLE
   UNIT
 }
 
+// ==========================================
+// 7. BIBLIOTHÈQUE SPÉCIFIQUE AU DOMAINE
+// ==========================================
+model LibraryItem {
+  id            String  @id @default(cuid())
+  domain        String
+  category      String
+  name          String  @unique
+  symbol        String?
+  properties    Json    @default("{}") @db.JsonB
+  computedCache Json?   @db.JsonB
+
+  // --- RÉCURSIVITÉ ---
+  components Composition[] @relation("parentItem")
+  usedIn     Composition[] @relation("childItem")
+
+  // --- CORRECTION ICI : Relation inverse pour NodeComponent ---
+  nodeComponents NodeComponent[] // Prisma a besoin de savoir que cet item est utilisé par plusieurs composants de noeuds
+
+  // --- TRAÇABILITÉ ---
+  sourceType SourceType @default(MANUAL)
+  sourceFile String?
+  aiMetadata Json?      @db.JsonB
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Composition {
+  id       String      @id @default(cuid())
+  parentId String
+  parent   LibraryItem @relation("parentItem", fields: [parentId], references: [id], onDelete: Cascade)
+  childId  String
+  child    LibraryItem @relation("childItem", fields: [childId], references: [id])
+
+  quantity Float // Coeff stoechiométrique ou nombre d'unités
+  unit     String? // "g/L", "pcs", "m"
+}
+
+enum SourceType {
+  MANUAL
+  JSON_IMPORT
+  AI_EXTRACT
+}
+
 model NodeComponent {
-  id               String        @id @default(cuid())
-  nodeId           String
-  node             Node          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  referenceItemId  String
-  referenceItem    ReferenceItem @relation(fields: [referenceItemId], references: [id])
-  targetType       TargetType    @default(ARTICLE)
-  targetBaseUnitId String?
-  targetBaseUnit   BaseUnit?     @relation("TargetUnit", fields: [targetBaseUnitId], references: [id])
-  value            Float
+  id     String @id @default(cuid())
+  nodeId String
+  node   Node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  libraryItemId String
+  // Cette ligne pointe vers LibraryItem
+  libraryItem   LibraryItem @relation(fields: [libraryItemId], references: [id])
+
+  targetId String?
+  value    Float
+}
+
+model CategorySchema {
+  id        String   @id @default(cuid())
+  domain    String   // "WATER"
+  category  String   // "PUMP", "TANK", "REAGENT"
+  
+  // La définition des champs (Array of FieldDefinition)
+  // Ex: [{ "id": "power", "label": "Puissance", "type": "number", "unit": "kW" }]
+  fields    Json     @db.JsonB 
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([domain, category]) // Une seule config par catégorie dans un domaine
+}
+
+// --- COLLABORATION ---
+model ProjectCollaborator {
+  id        String @id @default(cuid())
+  projectId String
+  userId    String
+  role      String @default("VIEWER") // "EDITOR", "VIEWER"
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+}
+
+// --- AUDIT & ANALYTICS ---
+model AuditLog {
+  id        String   @id @default(cuid())
+  domain    String
+  action    String // "SIMULATION_RUN", "OFFER_GENERATED", "LOGIN"
+  userId    String?
+  details   Json?
+  createdAt DateTime @default(now())
 }

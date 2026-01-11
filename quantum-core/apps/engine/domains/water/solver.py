@@ -2,117 +2,189 @@ import numpy as np
 from typing import List, Dict, Any
 
 def run_water_simulation(nodes: List[Any], edges: List[Any], sequences: List[Any], library: Dict[str, Any]):
-    """
-    Moteur de résolution matricielle Quantum Core v1.0
-    Calcule l'équilibre hydraulique et la concentration ionique stationnaire.
-    """
-    # 1. PRÉPARATION DU RÉFÉRENTIEL CHIMIQUE
-    # On crée un dictionnaire pour accéder vite aux compositions des produits
-    ref_items = {item['id']: item for item in library.get('referenceItems', [])}
+    # --- 1. HELPERS & SETUP ---
+    def get_prop(obj, key, default=0):
+        props = getattr(obj, 'properties', {}) if hasattr(obj, 'properties') else obj.get('properties', {})
+        val = props.get(key, default)
+        return val if val is not None else default
+
+    valid_tank_types = ["TANK", "PROCESS", "STATIC_RINSE", "CLASSIC_RINSE"]
+    tanks = [n for n in nodes if getattr(n, 'type', n.get('type')) in valid_tank_types or get_prop(n, 'type') in valid_tank_types]
+    sinks = [n for n in nodes if getattr(n, 'type', n.get('type')) == "SINK"]
+
+    tank_map = {getattr(t, 'id', t.get('id')): i for i, t in enumerate(tanks)}
+    tank_ids = list(tank_map.keys())
+    N = len(tanks)
+
+    if N == 0:
+        return {"status": "error", "message": "No tanks found."}
+
+    lib_items = {item['id']: item for item in library.get('referenceItems', [])}
+    lib_units = {unit['id']: unit for unit in library.get('baseUnits', [])}
     
-    # Identifier tous les ions (BaseUnits) présents dans le système
-    all_ion_ids = set()
-    for item in ref_items.values():
+    active_ion_ids = set()
+    for item in lib_items.values():
         for comp in item.get('composition', []):
-            all_ion_ids.add(comp['baseUnitId'])
-    
-    # 2. IDENTIFICATION DES NOEUDS DE CALCUL (PROCESS/RINSE)
-    calculation_nodes = [n for n in nodes if n.type in ["TANK", "RINSE"]]
-    node_map = {n.id: i for i, n in enumerate(calculation_nodes)}
-    num_nodes = len(calculation_nodes)
-    
-    if num_nodes == 0:
-        return {"status": "error", "message": "Aucun noeud de calcul trouvé"}
+            active_ion_ids.add(comp['baseUnitId'])
+    sorted_ions = sorted(list(active_ion_ids))
 
-    # 3. CALCUL DU BILAN HYDRAULIQUE (STATIONNAIRE)
-    # On calcule les débits sortants réels (Overlays + Drag-out)
-    q_out_total = np.zeros(num_nodes)
-    drag_out_matrix = np.zeros((num_nodes, num_nodes)) # [source][target]
+    # --- 2. PHYSICS: EVAPORATION ---
+    evap_rates = np.zeros(N)
+    for i, t in enumerate(tanks):
+        if get_prop(t, 'evapAuto', True):
+            length = float(get_prop(t, 'length', 1000))
+            width = float(get_prop(t, 'width', 800))
+            temp = float(get_prop(t, 'temp', 20))
+            surface_m2 = (length * width) / 1_000_000
+            delta_t = max(0, temp - 20)
+            evap_rates[i] = surface_m2 * delta_t * 0.05
+        else:
+            evap_rates[i] = float(get_prop(t, 'evaporationRate', 0))
 
-    for i, node in enumerate(calculation_nodes):
-        # Flux via tuyaux sortants (Edges)
-        pipes_out = sum(float(e.properties.get("flowRate", 0)) for e in edges if e.source == node.id)
-        
-        # Flux via entraînement (Sequences / Gammes)
-        drag_out_node = 0
-        for seq in sequences:
-            steps = seq.steps
-            cadence = float(seq.properties.get("cadence", 0))
-            factor = float(seq.properties.get("dragOut", 0))
-            q_step = cadence * factor # L/h
+    # --- 3. DRAG-OUT MATRIX ---
+    drag_out_total = np.zeros(N)
+    drag_in_total = np.zeros(N)
+    drag_matrix = np.zeros((N, N))
+
+    for seq in sequences:
+        steps = getattr(seq, 'steps', seq.get('steps', []))
+        cadence = float(get_prop(seq, 'cadence', 0)) 
+        factor = float(get_prop(seq, 'dragOut', 0))
+        q_step = cadence * factor
+        for idx, step_node_id in enumerate(steps):
+            if step_node_id not in tank_map: continue
+            u = tank_map[step_node_id]
+            drag_out_total[u] += q_step
+            if idx < len(steps) - 1:
+                next_id = steps[idx + 1]
+                if next_id in tank_map:
+                    v = tank_map[next_id]
+                    drag_matrix[u, v] += q_step
+                    drag_in_total[v] += q_step
+
+    # --- 4. HYDRAULIC BALANCE ---
+    q_overflow = np.zeros(N)
+    v_stab = np.zeros(N)
+    edge_inflows = {i: [] for i in range(N)}
+    for e in edges:
+        src = getattr(e, 'source', e.get('source'))
+        tgt = getattr(e, 'target', e.get('target'))
+        if src in tank_map and tgt in tank_map:
+            edge_inflows[tank_map[tgt]].append((tank_map[src], e))
+
+    for _ in range(20):
+        for i in range(N):
+            t = tanks[i]
+            loss_physics = evap_rates[i] + drag_out_total[i]
+            q_in = drag_in_total[i]
+            if get_prop(t, 'inletType') != 'CASCADE': 
+                q_in += float(get_prop(t, 'inletFlow', 0))
+            for src_idx, edge in edge_inflows[i]:
+                etype = get_prop(edge, 'type', 'OVERFLOW')
+                q_in += q_overflow[src_idx] if etype == 'OVERFLOW' else float(get_prop(edge, 'flowRate', 0))
             
-            if node.id in steps:
-                drag_out_node += q_step
-                # Si le noeud a un suivant dans la gamme, on marque le transfert
-                idx = steps.index(node.id)
-                if idx < len(steps) - 1:
-                    target_id = steps[idx + 1]
-                    if target_id in node_map:
-                        drag_out_matrix[i, node_map[target_id]] += q_step
-        
-        q_out_total[i] = pipes_out + drag_out_node
+            balance = q_in - loss_physics
+            if get_prop(t, 'inletAuto', True):
+                if balance < 0:
+                    v_stab[i] = abs(balance)
+                    q_overflow[i] = 0
+                else:
+                    v_stab[i] = 0
+                    q_overflow[i] = balance
+            else:
+                v_stab[i] = 0
+                q_overflow[i] = max(0, balance)
 
-    # 4. RÉSOLUTION ION PAR ION
-    final_results = {n.id: {"concentrations": {}} for n in calculation_nodes}
-    global_kpis = []
+    # --- 5. IONIC SOLVER (Ax = B) ---
+    final_results = {t_id: {"concentrations": {}} for t_id in tank_ids}
+    q_out_mass = q_overflow + drag_out_total
+    
+    for ion_id in sorted_ions:
+        A = np.zeros((N, N))
+        B = np.zeros(N)
+        has_source = False
+        for i in range(N):
+            A[i, i] = max(q_out_mass[i], 1e-6)
+            for j in range(N):
+                if drag_matrix[j, i] > 0: A[i, j] -= drag_matrix[j, i]
+            for src_idx, edge in edge_inflows[i]:
+                etype = get_prop(edge, 'type', 'OVERFLOW')
+                flow = q_overflow[src_idx] if etype == 'OVERFLOW' else float(get_prop(edge, 'flowRate', 0))
+                A[i, src_idx] -= flow
 
-    for ion_id in all_ion_ids:
-        # Ax = B
-        # A : Matrice de transport (L/h)
-        # B : Vecteur source (Apport de masse g/h)
-        A = np.zeros((num_nodes, num_nodes))
-        B = np.zeros(num_nodes)
-
-        for i, node in enumerate(calculation_nodes):
-            # Diagonale : Sorties totales de masse du bac i
-            # (Ce qui part à l'égout + ce qui part au bac suivant par les pièces)
-            A[i, i] = q_out_total[i]
-
-            # Hors-diagonale : Apports venant des autres bacs
-            # A. Par tuyauterie (Cascades)
-            for e in [e for e in edges if e.target == node.id]:
-                if e.source in node_map:
-                    A[i, node_map[e.source]] -= float(e.properties.get("flowRate", 0))
-            
-            # B. Par entraînement (Pièces venant du bac précédent)
-            for j in range(num_nodes):
-                if drag_out_matrix[j, i] > 0:
-                    A[i, j] -= drag_out_matrix[j, i]
-
-            # VECTEUR SOURCE B : Apport chimique direct (Bain de Process)
-            # On calcule la masse d'ion injectée par les ReferenceItems (Produits)
-            node_components = node.properties.get("components", [])
-            for comp in node_components:
-                ref_item = ref_items.get(comp['referenceItemId'])
-                if not ref_item: continue
-                
-                # Chercher la fraction de cet ion dans le produit
-                ion_coeff = next((c['coefficient'] for c in ref_item['composition'] if c['baseUnitId'] == ion_id), 0)
-                
-                if ion_coeff > 0:
-                    # g/h = Concentration(g/L) * Débit de purge(L/h)
-                    # Note: Dans un bain process à l'équilibre, on compense ce qui sort
-                    mass_input = float(comp['value']) * q_out_total[i] * ion_coeff
-                    B[i] += mass_input
-
-        # Résolution du système pour cet ion
-        try:
-            if np.any(B): # On ne calcule que si l'ion est présent
+            t = tanks[i]
+            components = get_prop(t, 'components', [])
+            for comp in components:
+                if comp.get('targetType') == 'ION' and comp.get('targetIonId') == ion_id:
+                    A[i, :] = 0; A[i, i] = 1; B[i] = float(comp.get('concentration', 0)); has_source = True
+                elif comp.get('targetType') == 'PRODUCT':
+                    prod = lib_items.get(comp.get('productId'))
+                    if prod:
+                        ion_part = next((c for c in prod.get('composition', []) if c['baseUnitId'] == ion_id), None)
+                        if ion_part:
+                            # Dirichlet pour les bains process
+                            A[i, :] = 0; A[i, i] = 1
+                            m_ion = lib_units.get(ion_id, {}).get('properties', {}).get('molarMass', 1)
+                            m_prod_total = sum(c['coefficient'] * lib_units.get(c['baseUnitId'], {}).get('properties', {}).get('molarMass', 1) for c in prod.get('composition', []))
+                            ratio = (ion_part['coefficient'] * m_ion) / m_prod_total if m_prod_total > 0 else 0
+                            B[i] += float(comp.get('concentration', 0)) * ratio; has_source = True
+        if has_source:
+            try:
                 x = np.linalg.solve(A, B)
-                for i, node in enumerate(calculation_nodes):
-                    final_results[node.id]["concentrations"][ion_id] = round(max(0, x[i]), 3)
-        except np.linalg.LinAlgError:
-            continue
+                for i in range(N): final_results[tank_ids[i]]["concentrations"][ion_id] = round(max(0, float(x[i])), 4)
+            except np.linalg.LinAlgError: pass
 
-    # 5. FORMATAGE DES KPIS
-    total_chemicals = sum(float(n.properties.get("price", 0)) for n in nodes)
-    
+    # --- 6. NETWORK AGGREGATION & WARNINGS ---
+    networks_summary = []
+    for sink in sinks:
+        sink_id = getattr(sink, 'id', sink.get('id'))
+        total_flow = 0
+        total_mass = 0
+        for i, t in enumerate(tanks):
+            # On vérifie les deux types de raccordement
+            if get_prop(t, 'dumpingNetworkId') == sink_id or get_prop(t, 'overflowNetworkId') == sink_id:
+                flow = q_overflow[i]
+                total_flow += flow
+                total_mass += flow * sum(final_results[tank_ids[i]]["concentrations"].values())
+        
+        networks_summary.append({
+            "network": getattr(sink, 'data', {}).get('label', "Réseau"),
+            "flow": round(total_flow, 2),
+            "mass": round(total_mass, 2),
+            "unit": "L/h"
+        })
+        final_results[sink_id] = {"flow": round(total_flow, 2)}
+
+    # --- 6.5 WARNINGS (FIXED LOGIC) ---
+    for i, t in enumerate(tanks):
+        t_id = tank_ids[i]
+        warnings = []
+        
+        # Correction DRY_TANK : on compte TOUTES les entrées
+        total_q_in = drag_in_total[i] + float(get_prop(t, 'inletFlow', 0))
+        for src_idx, edge in edge_inflows[i]:
+            etype = get_prop(edge, 'type', 'OVERFLOW')
+            total_q_in += q_overflow[src_idx] if etype == 'OVERFLOW' else float(get_prop(edge, 'flowRate', 0))
+
+        if not get_prop(t, 'inletAuto', True) and (total_q_in < (evap_rates[i] + drag_out_total[i]) - 0.01):
+            warnings.append({"type": "DRY_TANK", "severity": "CRITICAL", "message": "Niveau baisse : manque d'appoint."})
+
+        # Correction STAGNANT : on ignore les bains process
+        if get_prop(t, 'type') != 'PROCESS' and (q_overflow[i] + drag_out_total[i] < 0.01):
+            warnings.append({"type": "STAGNANT", "severity": "WARNING", "message": "Poste stagnant : risque d'accumulation."})
+
+        final_results[t_id].update({
+            "warnings": warnings,
+            "evaporation": round(evap_rates[i], 2),
+            "waterMakeup": round(v_stab[i], 2)
+        })
+
     return {
         "status": "success",
         "kpis": [
-            {"label": "Investissement", "value": total_chemicals, "unit": "€", "color": "emerald-600"},
-            {"label": "Ions suivis", "value": len(all_ion_ids), "unit": "", "color": "blue-600"},
-            {"label": "Débit Rejet", "value": sum(q_out_total), "unit": "L/h", "color": "blue-400"}
+            {"label": "Conso Eau", "value": round(sum(v_stab), 0), "unit": "L/h", "color": "blue-600"},
+            {"label": "Rejet Total", "value": round(sum(q_overflow), 0), "unit": "L/h", "color": "orange-600"}
         ],
-        "node_details": final_results
+        "node_details": final_results,
+        "networks": networks_summary
     }
