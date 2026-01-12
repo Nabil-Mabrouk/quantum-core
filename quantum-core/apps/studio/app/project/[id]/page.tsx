@@ -3,8 +3,8 @@ import { getProjectTopology } from '@/app/actions/stream';
 import { BlueprintFlow } from '@/components/canvas/blueprint/blueprint-flow';
 import { SideNav } from '@/components/layout/shell/side-nav';
 import { UniversalHeader } from '@/components/layout/shell/universal-header';
-import { AnalysisReport } from '@/components/domains/water/analysis-report';
-import { getDomainConfig } from '@/lib/registry';
+// NOUVEAU : Import du viewer générique
+import { GenericReportViewer } from '@/components/layout/generic-report-viewer';
 
 export default async function ProjectBlueprintPage(props: { 
   params: Promise<{ id: string }>,
@@ -12,9 +12,7 @@ export default async function ProjectBlueprintPage(props: {
 }) {
   const { id } = await props.params;
   const { view } = await props.searchParams;
-  const currentView = view || 'map'; // 'map' (Blueprint) ou 'summary' (Bilan)
-
-  const config = getDomainConfig();
+  const currentView = view || 'map'; 
 
   // 1. Fetch project details
   const project = await db.project.findUniqueOrThrow({
@@ -25,11 +23,11 @@ export default async function ProjectBlueprintPage(props: {
   // 2. Fetch topology
   const { systems, streams } = await getProjectTopology(id);
 
-  // 3. Prepare Nodes (Systems) avec positions DB
+  // 3. Prepare Nodes (Systems)
   const initialNodes = systems.map((sys) => ({
     id: sys.id,
     type: 'systemNode',
-    position: { x: sys.positionX, y: sys.positionY }, // Persistance de la position
+    position: { x: sys.positionX, y: sys.positionY },
     data: { 
         id: sys.id,
         label: sys.name, 
@@ -61,12 +59,10 @@ export default async function ProjectBlueprintPage(props: {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-900">
-      {/* BARRE LATÉRALE */}
       <SideNav projectId={id} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         
-        {/* HEADER UNIFIÉ (Gère les onglets Plan / Bilan) */}
         <UniversalHeader 
           projectName={project.name} 
           projectId={id}
@@ -75,9 +71,9 @@ export default async function ProjectBlueprintPage(props: {
 
         <main className="flex-1 relative bg-slate-50 overflow-hidden">
            {currentView === 'summary' ? (
-              // VUE BILAN PLEIN ÉCRAN
+              // VUE BILAN : Rendu Générique via le Wrapper Client
               <div className="h-full overflow-y-auto custom-scrollbar">
-                 <AnalysisReport /> 
+                 <GenericReportViewer domain={project.domain} /> 
               </div>
            ) : (
               // VUE BLUEPRINT (CARTE)

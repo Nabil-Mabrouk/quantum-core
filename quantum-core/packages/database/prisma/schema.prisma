@@ -314,7 +314,7 @@ model AuditLog {
   id        String   @id @default(cuid())
   domain    String
   action    String // "SIMULATION_RUN", "OFFER_GENERATED", "LOGIN"
-  userId    String?
+  userId    String? @default(cuid())
   details   Json?
   createdAt DateTime @default(now())
 }

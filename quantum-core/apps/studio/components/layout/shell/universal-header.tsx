@@ -10,12 +10,13 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { SystemSelector } from '../system-selector';
 import { clsx } from 'clsx';
-import { runSimulationAction, generateProposalAction, runProjectSummaryAction } from '@/app/actions/simulation';
+import { runProjectSummaryAction } from '@/app/actions/simulation'; // runSimulationAction n'est plus appelé directement ici, on passe par l'API stream
 import { saveGraph } from '@/app/actions/graph';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { getDomainConfig } from '@/lib/registry';
 import { toast } from "sonner";
 import { ProjectSettingsModal } from '../project-settings-modal';
+import { SimulationConsole } from '@/components/ui/simulation-console';
 
 interface UniversalHeaderProps {
   projectName?: string;
@@ -28,22 +29,33 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
   const config = getDomainConfig();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const currentView = searchParams.get('view') || 'map';
   
+  // --- DÉCLARATION MANQUANTE ---
+  const currentView = searchParams.get('view') || 'map'; 
+  // -----------------------------
+
   // Utilisation simple pour détecter le mode Library
   const isLibrary = pathname.includes('/library');
 
   const store = useCanvasStore();
   const { viewMode, setViewMode, nodes, edges, sequences, setSummaryData, setSynopticMode, synopticMode } = store;
   
-  // États de chargement
+  // États de chargement & UI
   const [isSaving, setIsSaving] = useState(false);
-  const [isSimulating, setIsSimulating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Détermine le contexte (Niveau Projet vs Niveau Système)
+  // ÉTATS POUR LE STREAMING
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [showConsole, setShowConsole] = useState(false);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [progress, setProgress] = useState(0);
+  const [simStatus, setSimStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Détermine le contexte
   const isProjectLevel = projectId && !currentSystemId;
   const isSystemLevel = !!currentSystemId;
 
@@ -56,6 +68,7 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
     }
     
     setIsSaving(true);
+    // Nettoyage léger des noeuds avant envoi
     const cleanNodes = nodes.map(n => ({
       id: n.id,
       position: n.position,
@@ -77,47 +90,111 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
     }
   };
 
-  const handleSimulate = async () => {
+  const handleAbort = () => {
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+        setLogs(prev => [...prev, { message: "🛑 Arrêt demandé par l'utilisateur.", timestamp: new Date().toLocaleTimeString() }]);
+        setSimStatus('error');
+        setIsSimulating(false);
+        toast.info("Simulation interrompue");
+    }
+  };
+
+  // Simulation via Streaming (API Route)
+  const handleSimulateStreaming = async () => {
     if (!config?.id || !currentSystemId) {
-      toast.warning("Données manquantes", { description: "Impossible de lancer la simulation." });
+      toast.warning("Données manquantes");
       return;
     }
 
+    // 1. Initialisation UI
     setIsSimulating(true);
-    try {
-      const res = await runSimulationAction(
-        config.id, 
-        currentSystemId,
-        nodes, 
-        edges, 
-        sequences
-      );
+    setSimStatus('running');
+    setShowConsole(true);
+    setLogs([{ message: "🚀 Démarrage du moteur Quantum...", timestamp: new Date().toLocaleTimeString() }]);
+    setProgress(5);
 
-      if (res.success) {
-        if (res.data.status === "success") {
-          const details = res.data.node_details;
-          // Mise à jour des résultats dans le store pour affichage sur les noeuds
-          Object.keys(details).forEach(id => store.updateNodeProperties(id, { simulationResults: details[id] }));
-          store.setSummaryData(res.data); 
-          
-          toast.success("Simulation terminée", { description: "Les bilans ont été mis à jour." });
-        } else {
-          toast.error("Erreur Moteur", { description: res.data.message });
+    // 2. Préparation Annulation
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+        // 3. Appel API (Proxy vers Python)
+        const response = await fetch('/api/simulation/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectId: projectId, // <--- AJOUT CRUCIAL ICI
+                domain: config.id,
+                nodes: nodes.map(n => ({ id: n.id, type: n.type, properties: n.data.properties })),
+                edges: edges.map(e => ({ source: e.source, target: e.target, properties: e.data })),
+                sequences,
+                library: null, 
+                project_settings: {} 
+            }),
+            signal: controller.signal,
+        });
+
+        if (!response.body) throw new Error("Pas de flux de réponse");
+
+        // 4. Lecture du Flux (Streaming)
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; 
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const msg = JSON.parse(line);
+                    
+                    if (msg.type === 'log') {
+                        setLogs(prev => [...prev, { message: msg.message, timestamp: new Date().toLocaleTimeString() }]);
+                        if (msg.progress) setProgress(msg.progress);
+                    }
+                    else if (msg.type === 'result') {
+                        // SUCCÈS
+                        const res = msg.data;
+                        const details = res.node_details;
+                        Object.keys(details).forEach(id => store.updateNodeProperties(id, { simulationResults: details[id] }));
+                        store.setSummaryData(res);
+                        
+                        setSimStatus('success');
+                        toast.success("Simulation terminée");
+                    }
+                    else if (msg.type === 'error') {
+                        throw new Error(msg.message);
+                    }
+                } catch (e) {
+                    // Ignorer les lignes JSON partielles
+                }
+            }
         }
-      } else {
-        toast.error("Erreur Serveur", { description: res.error });
-      }
-    } catch (e) {
-      console.error(e);
-      toast.error("Erreur lors de l'appel à la simulation.");
+
+    } catch (error: any) {
+        if (error.name === 'AbortError') {
+            console.log("Simulation annulée");
+        } else {
+            setLogs(prev => [...prev, { message: `❌ ERREUR: ${error.message}`, timestamp: new Date().toLocaleTimeString() }]);
+            setSimStatus('error');
+            toast.error("Erreur Moteur");
+        }
     } finally {
-      setIsSimulating(false);
+        setIsSimulating(false);
+        abortControllerRef.current = null;
     }
   };
 
   const handleGenerateOffer = async () => {
     setIsGenerating(true);
-    // Note: Implémentation simplifiée pour l'exemple
     setTimeout(() => {
         toast.info("Génération IA simulée", { description: "Fonctionnalité en cours de développement." });
         setIsGenerating(false);
@@ -145,10 +222,9 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
 
   return (
     <>
-      {/* HEADER PRINCIPAL - GRID LAYOUT */}
       <header className="h-16 border-b border-slate-200 bg-white grid grid-cols-[1fr_auto_1fr] items-center px-6 shrink-0 z-40 shadow-sm relative transition-all">
         
-        {/* --- 1. GAUCHE : BREADCRUMBS --- */}
+        {/* --- GAUCHE --- */}
         <div className="flex items-center justify-start min-w-0">
           <Link href="/dashboard" className="flex items-center gap-3 mr-4 group">
              <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white font-bold shadow-lg group-hover:scale-105 transition-transform">QC</div>
@@ -179,23 +255,17 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
               <>
                 <ChevronRight className="w-3 h-3 text-slate-300 flex-shrink-0" />
                 <div className="flex-shrink-0">
-                   {/* Le sélecteur de système est isolé ici */}
-                   <SystemSelector 
-                      systems={systems} 
-                      currentSystemId={currentSystemId} 
-                      projectId={projectId} 
-                   />
+                   <SystemSelector systems={systems} currentSystemId={currentSystemId} projectId={projectId} />
                 </div>
               </>
             )}
           </nav>
         </div>
 
-        {/* --- 2. CENTRE : VIEW SWITCHER --- */}
+        {/* --- CENTRE --- */}
         <div className="flex justify-center">
           <div className="bg-slate-100 p-1 rounded-xl border border-slate-200 flex items-center gap-1 h-10">
-            
-            {/* VUE PROJET (Blueprint vs Bilan Global) */}
+            {/* VUE PROJET */}
             {isProjectLevel && (
               <>
                 <Link 
@@ -220,47 +290,22 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
               </>
             )}
 
-            {/* VUE SYSTÈME (Graphe vs Synoptique vs Bilan Local) */}
+            {/* VUE SYSTÈME */}
             {isSystemLevel && (
               <>
-                <button 
-                  onClick={() => setViewMode('GRAPH')}
-                  className={clsx(
-                    "px-3 h-full rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest", 
-                    viewMode === 'GRAPH' ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                  )}
-                  title="Vue Engineering (P&ID)"
-                >
+                <button onClick={() => setViewMode('GRAPH')} className={clsx("px-3 h-full rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest", viewMode === 'GRAPH' ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600")}>
                   <Network className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Graphe</span>
                 </button>
-                
-                <button 
-                  onClick={() => setViewMode('SYNOPTIC')}
-                  className={clsx(
-                    "px-3 h-full rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest", 
-                    viewMode === 'SYNOPTIC' ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                  )}
-                  title="Vue Opérateur"
-                >
+                <button onClick={() => setViewMode('SYNOPTIC')} className={clsx("px-3 h-full rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest", viewMode === 'SYNOPTIC' ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600")}>
                   <ListOrdered className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Synoptique</span>
                 </button>
-
                 <div className="w-px h-4 bg-slate-300/50 mx-1" />
-                
-                <button 
-                  onClick={() => setViewMode('SUMMARY')}
-                  className={clsx(
-                    "px-3 h-full rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest", 
-                    viewMode === 'SUMMARY' ? "bg-white text-purple-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                  )}
-                  title="Résultats de simulation"
-                >
+                <button onClick={() => setViewMode('SUMMARY')} className={clsx("px-3 h-full rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest", viewMode === 'SUMMARY' ? "bg-white text-purple-600 shadow-sm" : "text-slate-400 hover:text-slate-600")}>
                   <Factory className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Résultats</span>
                 </button>
               </>
             )}
 
-            {/* MODE LIBRAIRIE (FALLBACK) */}
             {isLibrary && (
                 <div className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                     Mode Gestion Référentiel
@@ -269,52 +314,33 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
           </div>
         </div>
 
-        {/* --- 3. DROITE : ACTIONS --- */}
+        {/* --- DROITE --- */}
         <div className="flex items-center justify-end gap-2">
-          
-          {/* Placeholder visuel pour éviter le vide si pas de boutons */}
           {!isSystemLevel && !isLibrary && <div className="h-9" />}
 
           {isSystemLevel && (
             <>
-              {/* Paramètres */}
-              <button 
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors"
-                  title="Paramètres Projet"
-              >
+              <button onClick={() => setIsSettingsOpen(true)} className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors" title="Paramètres Projet">
                   <Settings className="w-4 h-4" />
               </button>
 
               <div className="h-6 w-px bg-slate-200 mx-1" />
 
-              {/* IA (Caché sur mobile) */}
-              <button 
-                  onClick={handleGenerateOffer} 
-                  disabled={isGenerating || nodes.length === 0}
-                  className="hidden lg:flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-purple-600 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 disabled:opacity-30 transition-all"
-              >
-                  {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                  IA
+              <button onClick={handleGenerateOffer} disabled={isGenerating || nodes.length === 0} className="hidden lg:flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-purple-600 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 disabled:opacity-30 transition-all">
+                  {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} IA
               </button>
 
-              {/* Simuler */}
+              {/* BOUTON SIMULER (Streaming) */}
               <button 
-                  onClick={handleSimulate} 
+                  onClick={handleSimulateStreaming} 
                   disabled={isSimulating || nodes.length === 0}
                   className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition-all disabled:opacity-50"
-                  title="Lancer le calcul"
               >
                   {isSimulating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-current" />}
                   <span className="hidden xl:inline">Simuler</span>
               </button>
 
-              {/* Sauvegarder */}
-              <button 
-                  onClick={handleSave} 
-                  disabled={isSaving}
-                  className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white bg-slate-900 rounded-xl hover:bg-black transition-all shadow-lg shadow-slate-200 disabled:opacity-50"
-              >
+              <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white bg-slate-900 rounded-xl hover:bg-black transition-all shadow-lg shadow-slate-200 disabled:opacity-50">
                   {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                   <span className="hidden xl:inline">Sauvegarder</span>
               </button>
@@ -323,13 +349,19 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
         </div>
       </header>
 
-      {/* --- MODALE SETTINGS --- */}
       {isSettingsOpen && (
-        <ProjectSettingsModal 
-          projectId={projectId} 
-          onClose={() => setIsSettingsOpen(false)} 
-        />
+        <ProjectSettingsModal projectId={projectId} onClose={() => setIsSettingsOpen(false)} />
       )}
+
+      {/* Console de simulation */}
+      <SimulationConsole 
+         isOpen={showConsole} 
+         onClose={() => setShowConsole(false)} 
+         logs={logs} 
+         progress={progress}
+         status={simStatus}
+         onAbort={handleAbort}
+      />
     </>
   );
 }

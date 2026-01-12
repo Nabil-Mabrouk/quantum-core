@@ -4,13 +4,18 @@ import { ProjectCard } from '@/components/dashboard/project-card';
 import { SideNav } from '@/components/layout/shell/side-nav';
 import { UniversalHeader } from '@/components/layout/shell/universal-header';
 import { Plus, LayoutGrid, Search, Filter } from 'lucide-react';
+import { getAvailableDomains } from '@/lib/registry'; // <--- Import pour récupérer la liste des domaines
 
 export default async function DashboardPage() {
-  // Récupération de tous les projets
-  const projects = await db.project.findMany({
-    orderBy: { updatedAt: 'desc' },
-    include: { systems: true }
-  });
+  // 1. Récupération des données en parallèle (Performance)
+  const [projects, availableDomains] = await Promise.all([
+    db.project.findMany({
+      orderBy: { updatedAt: 'desc' },
+      include: { systems: true }
+    }),
+    // On récupère la liste des domaines configurés (Water, Surface Treatment, etc.)
+    Promise.resolve(getAvailableDomains()) 
+  ]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white">
@@ -18,7 +23,7 @@ export default async function DashboardPage() {
       <SideNav />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* 2. HEADER UNIFIÉ (Fil d'ariane simplifié pour le dashboard) */}
+        {/* 2. HEADER UNIFIÉ */}
         <UniversalHeader />
 
         {/* 3. CONTENU PRINCIPAL SCROLLABLE */}
@@ -32,13 +37,33 @@ export default async function DashboardPage() {
                 <p className="text-slate-500 mt-1 font-medium italic">Gérez vos jumeaux numériques industriels.</p>
               </div>
 
+              {/* FORMULAIRE DE CRÉATION RAPIDE */}
               <form action={createProjectAction} className="flex gap-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+                
+                {/* Input Nom */}
                 <input 
                   name="name" 
                   placeholder="Nom du projet..." 
-                  className="bg-slate-50 border-none rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 w-64"
+                  className="bg-slate-50 border-none rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 w-48 lg:w-64 transition-all"
                   required
                 />
+
+                {/* Sélecteur de Domaine (Dynamique) */}
+                <div className="relative border-l border-slate-100 pl-2">
+                    <select 
+                        name="domain" 
+                        className="h-full bg-transparent text-xs font-bold text-slate-600 outline-none cursor-pointer hover:text-blue-600 transition-colors pr-2"
+                        defaultValue="SURFACE_TREATMENT"
+                    >
+                        {availableDomains.map((domain) => (
+                            <option key={domain.id} value={domain.id}>
+                                {domain.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* Bouton Submit */}
                 <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg shadow-blue-500/20">
                   <Plus className="w-4 h-4" /> Créer
                 </button>

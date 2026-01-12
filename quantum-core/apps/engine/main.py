@@ -1,24 +1,51 @@
 import os
 import logging
-from fastapi import FastAPI, Header, HTTPException, Depends
+import json
+from fastapi import FastAPI, Header, HTTPException, Depends, Request 
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
-from numpy.linalg import LinAlgError
-
-# Imports des domaines
-from domains.water.solver import run_water_simulation, evaluate_water_node
-from domains.water.proposal import generate_water_proposal
-# L'orchestrateur gère la logique multi-systèmes
+import asyncio
+# --- IMPORTS DES DOMAINES ---
+from domains.surface_treatment.solver import run_surface_simulation_stream
 import orchestrator 
-
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        log_entry = {
+            "timestamp": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "logger": record.name,
+            "module": record.module,
+            "funcName": record.funcName,
+            "lineNo": record.lineno,
+            "process": record.process,
+            "thread": record.thread,
+        }
+        if record.exc_info:
+            log_entry["exc_info"] = self.formatException(record.exc_info)
+        if record.extra: # Pour ajouter des infos custom
+            log_entry.update(record.extra)
+        return json.dumps(log_entry)
+    
 # Configuration du Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("quantum-core-engine")
 
+# Si des handlers existent déjà (ex: celui de uvicorn), on les supprime
+if logger.handlers:
+    for handler in logger.handlers:
+        logger.removeHandler(handler)
+
+# Ajout du StreamHandler (console) avec notre formateur JSON
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(JsonFormatter())
+logger.addHandler(console_handler)
+
 app = FastAPI(
     title="Quantum Core Engine",
-    description="Calculateur scientifique pour l'ingénierie (Eau, Énergie, Systèmes)",
-    version="2.1.0"
+    description="Calculateur scientifique pour l'ingénierie (Traitement de Surface)",
+    version="3.3.0"
 )
 
 INTERNAL_SECRET = os.getenv("INTERNAL_API_SECRET")
@@ -29,7 +56,6 @@ class Node(BaseModel):
     id: str
     type: str
     properties: Dict[str, Any] = {}
-    # Nouveaux champs pour le Bus de Données (System of Systems)
     inputStreamId: Optional[str] = None
     outputStreamId: Optional[str] = None
 
@@ -41,13 +67,13 @@ class Edge(BaseModel):
 class Sequence(BaseModel):
     id: str
     name: Optional[str] = "Gamme"
-    steps: List[str]  # Liste des IDs de noeuds
+    steps: List[str]
     properties: Dict[str, Any] = {}
 
 class ProjectStream(BaseModel):
     id: str
     name: str
-    value: Dict[str, Any] = Field(default_factory=dict) # Stocke {flow, concentrations...}
+    value: Dict[str, Any] = Field(default_factory=dict)
 
 class SystemPayload(BaseModel):
     id: str
@@ -57,108 +83,143 @@ class SystemPayload(BaseModel):
     sequences: List[Sequence] = []
 
 class SimulationPayload(BaseModel):
-    """Payload pour simuler un seul système isolé."""
     domain: str
     nodes: List[Node]
     edges: List[Edge]
     sequences: List[Sequence] = []
     library: Optional[Dict[str, Any]] = None
+    project_settings: Optional[Dict[str, Any]] = {}
 
 class ProjectPayload(BaseModel):
-    """Payload pour simuler un projet complet (System of Systems)."""
     projectId: str
     domain: str
     systems: List[SystemPayload]
     streams: List[ProjectStream]
     library: Optional[Dict[str, Any]] = None
+    project_settings: Optional[Dict[str, Any]] = {}
 
 # --- MIDDLEWARE DE SÉCURITÉ ---
 
 async def verify_secret(x_internal_secret: str = Header(None)):
-    """Vérifie que l'appel provient bien du Studio via le secret partagé."""
     if not INTERNAL_SECRET or x_internal_secret != INTERNAL_SECRET:
         logger.warning("Tentative d'accès non autorisée rejetée.")
         raise HTTPException(status_code=403, detail="Forbidden: Invalid API Secret")
 
+
+# --- MIDDLEWARE GLOBAL POUR TRACER LES REQUÊTES ---
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = asyncio.get_event_loop().time()
+    response = await call_next(request)
+    process_time = asyncio.get_event_loop().time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    
+    # Ajoute le chemin et la durée aux logs de toutes les requêtes
+    logger.info("Request processed", extra={"path": request.url.path, "method": request.method, "process_time": f"{process_time:.4f}s"})
+    return response
+
+
 # --- ROUTES API ---
 
-@app.post("/simulate", dependencies=[Depends(verify_secret)])
-def simulate(payload: SimulationPayload):
+@app.post("/simulate-stream", dependencies=[Depends(verify_secret)])
+async def simulate_stream(payload: SimulationPayload, request: Request):
     """
-    Simule un système unique de manière isolée.
-    Utilisé par l'éditeur détaillé pour les retours temps réel.
+    Endpoint Streaming : Retourne un flux NDJSON.
+    Convertit les modèles Pydantic en Dictionnaires pour le solveur.
     """
-    if payload.domain == "WATER":
+    logger.info(f"Streaming Simulation demandée pour : {payload.domain}", extra={"project_id": payload.projectId if hasattr(payload, 'projectId') else 'N/A'})
+
+    if payload.domain == "SURFACE_TREATMENT":
         try:
-            return run_water_simulation(
-                payload.nodes, 
-                payload.edges, 
-                payload.sequences, 
-                payload.library
+            nodes_dict = [n.model_dump() for n in payload.nodes]
+            edges_dict = [e.model_dump() for e in payload.edges]
+            sequences_dict = [s.model_dump() for s in payload.sequences]
+
+            return StreamingResponse(
+                run_surface_simulation_stream(
+                    nodes_dict,
+                    edges_dict,
+                    sequences_dict,
+                    payload.library,
+                    payload.project_settings
+                ),
+                media_type="application/x-ndjson"
             )
-        except LinAlgError:
-            raise HTTPException(
-                status_code=400, 
-                detail="Erreur mathématique : La matrice est singulière. Vérifiez les boucles ou les absences de sortie."
-            )
+        except Exception as e:
+            logger.error(f"Erreur Surface Treatment: {str(e)}", exc_info=True, extra={"domain": payload.domain})
+            raise HTTPException(status_code=400, detail=f"Erreur de calcul physique : {str(e)}")
     
-    # Prêt pour d'autres domaines (ex: ENERGY)
-    # elif payload.domain == "ENERGY":
-    #     return run_energy_simulation(...)
+    logger.warning(f"Domaine {payload.domain} non supporté pour le streaming", extra={"domain": payload.domain})
+    raise HTTPException(status_code=400, detail=f"Streaming non supporté pour le domaine {payload.domain}")
+
+
+@app.post("/simulate", dependencies=[Depends(verify_secret)])
+async def simulate(payload: SimulationPayload, request: Request):
+    """
+    Endpoint Legacy (Bloquant).
+    Utile pour les tests ou les appels synchrones.
+    """
+    if payload.domain == "SURFACE_TREATMENT":
+        try:
+            # Conversion Pydantic -> Dict
+            nodes_dict = [n.model_dump() for n in payload.nodes]
+            edges_dict = [e.model_dump() for e in payload.edges]
+            sequences_dict = [s.model_dump() for s in payload.sequences]
+
+            generator = run_surface_simulation_stream(
+                nodes_dict, edges_dict, sequences_dict,
+                payload.library, payload.project_settings
+            )
+            
+            final_result = None
+            async for chunk in generator:
+                if not chunk.strip(): continue
+                try:
+                    msg = json.loads(chunk)
+                    if msg['type'] == 'result':
+                        final_result = msg['data']
+                    elif msg['type'] == 'error':
+                        raise HTTPException(status_code=500, detail=msg['message'])
+                except json.JSONDecodeError:
+                    pass
+
+            if final_result:
+                return final_result
+            else:
+                raise HTTPException(status_code=500, detail="Aucun résultat retourné par le solveur")
+
+        except Exception as e:
+            logger.error(f"Erreur Simulation Legacy: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e))
 
     raise HTTPException(status_code=400, detail=f"Domaine {payload.domain} non supporté")
 
+
 @app.post("/solve-project", dependencies=[Depends(verify_secret)])
-def solve_project(payload: ProjectPayload):
+async def solve_project(payload: ProjectPayload, request: Request):
     """
-    Orchestrateur Global : Résout l'ensemble des systèmes d'un projet.
-    Fait circuler les données entre les systèmes via les ProjectStreams.
+    Orchestrateur Global (System of Systems).
     """
-    logger.info(f"Résolution globale demandée pour le projet: {payload.projectId}")
+    logger.info(f"Résolution globale demandée pour le projet: {payload.projectId}", extra={"project_id": payload.projectId, "domain": payload.domain})
     try:
-        return orchestrator.solve(payload)
+        return await orchestrator.solve(payload)
     except Exception as e:
-        logger.error(f"Erreur d'orchestration : {str(e)}")
+        logger.error(f"Erreur d'orchestration pour le projet {payload.projectId}: {str(e)}", exc_info=True, extra={"project_id": payload.projectId, "domain": payload.domain})
         raise HTTPException(status_code=500, detail=f"Erreur lors de la résolution globale : {str(e)}")
+
 
 @app.post("/evaluate-node", dependencies=[Depends(verify_secret)])
 def evaluate_node(payload: Dict[str, Any]):
-    """
-    Calcul rapide pour un noeud unique (ex: évaporation d'une cuve).
-    Utilisé pour mettre à jour les propriétés 'computed' pendant la saisie.
-    """
-    domain = payload.get("domain")
-    node_type = payload.get("node_type")
-    properties = payload.get("properties", {})
-
-    if domain == "WATER":
-        return evaluate_water_node(node_type, properties)
-    
     return {"computed": {}}
 
 @app.post("/generate-proposal", dependencies=[Depends(verify_secret)])
 def generate_proposal(payload: SimulationPayload):
-    """
-    Génère une analyse textuelle/technique basée sur l'état du système.
-    """
-    if payload.domain == "WATER":
-        proposal = generate_water_proposal(payload.nodes, payload.edges)
-        return {"proposal": proposal}
-    
-    raise HTTPException(status_code=400, detail="Génération non supportée pour ce domaine")
+    return {"proposal": f"Fonctionnalité IA pour {payload.domain} en cours de développement."}
 
 @app.post("/project-summary", dependencies=[Depends(verify_secret)])
 def project_summary(payload: Dict[str, Any]):
-    """
-    Endpoint de résumé (Legacy). 
-    Note: Devrait être migré vers /solve-project côté Frontend.
-    """
-    # ... (Garder la logique d'agrégation simple si nécessaire)
-    return {"status": "deprecated", "message": "Utilisez /solve-project pour les bilans multi-systèmes"}
-
-# --- EXÉCUTION ---
+    return {"status": "deprecated", "message": "Utilisez /solve-project"}
 
 if __name__ == "__main__":
     import uvicorn
-    # En développement, on active le reload
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

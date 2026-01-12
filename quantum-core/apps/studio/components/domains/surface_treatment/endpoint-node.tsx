@@ -3,22 +3,20 @@
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { 
-  Waves,       // Pour les Sinks (Réseaux)
-  Droplets,    // Pour les Sources (Eau propre)
-  ArrowRight,
-  ArrowLeft
+  Waves,       // Pour les Drains (Rejets)
+  ArrowRight,  // Pour les Sources (Recyclage)
+  Droplets
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
-export const WaterEndpointNode = memo(({ id, data, selected }: NodeProps) => {
-  const role = data.role || 'SINK'; // SOURCE ou SINK
-  const props = data.properties || {};
-  
-  // Configuration visuelle selon le rôle
-  const isSource = role === 'SOURCE';
-  const Icon = isSource ? Droplets : Waves;
+export const EndpointNode = memo(({ id, data, selected }: NodeProps) => {
+  // Le rôle est défini dans le manifeste (SOURCE ou DRAIN)
+  // Ou fallback sur le type
+  const isSource = data.type === 'SOURCE';
+  const Icon = isSource ? ArrowRight : Waves;
   
   // Résultats de simulation (ex: Total collecté par ce réseau)
+  const props = data.properties || {};
   const simResults = props.simulationResults || {};
   const totalFlow = simResults.flow || 0; // Calculé par le moteur Python
 
@@ -43,16 +41,16 @@ export const WaterEndpointNode = memo(({ id, data, selected }: NodeProps) => {
       {/* Informations */}
       <div className="flex-1 min-w-0">
         <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">
-          {isSource ? "Alimentation" : "Réseau / Rejet"}
+          {isSource ? "Source / Recyclage" : "Réseau / Rejet"}
         </p>
         <p className="text-sm font-bold text-slate-800 truncate leading-none">
-          {data.label}
+          {data.label || "Sans nom"}
         </p>
         
         {/* Affichage du débit calculé (Résultat Simulation) */}
         {!isSource && totalFlow > 0 && (
            <p className="text-[10px] font-mono font-bold text-emerald-600 mt-1">
-             In: {totalFlow.toFixed(1)} L/h
+             Volume: {totalFlow.toFixed(1)} L/h
            </p>
         )}
       </div>
@@ -67,7 +65,7 @@ export const WaterEndpointNode = memo(({ id, data, selected }: NodeProps) => {
         />
       )}
 
-      {/* Un Sink a seulement une entrée (à gauche) */}
+      {/* Un Drain a seulement une entrée (à gauche) */}
       {!isSource && (
         <Handle 
           type="target" 
@@ -79,4 +77,4 @@ export const WaterEndpointNode = memo(({ id, data, selected }: NodeProps) => {
   );
 });
 
-WaterEndpointNode.displayName = "WaterEndpointNode";
+EndpointNode.displayName = "EndpointNode";

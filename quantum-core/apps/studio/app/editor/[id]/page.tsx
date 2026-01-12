@@ -17,13 +17,15 @@ export default async function EngineeringStudio(props: {
 }) {  
   const { id: projectId } = await props.params;
   const { systemId: searchSystemId } = await props.searchParams;
-  const config = getDomainConfig();
+  
 
   // 1. Chargement du projet et de ses systèmes
   const project = await db.project.findUniqueOrThrow({ 
     where: { id: projectId },
     include: { systems: true }
   });
+
+  const config = getDomainConfig(project.domain); 
   
   // 2. Détermination du système courant
   const currentSystemId = searchSystemId || project.systems[0]?.id;

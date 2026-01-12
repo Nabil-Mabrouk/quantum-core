@@ -1,9 +1,11 @@
-import { WaterNode } from '@/components/domains/water/water-node';
-import { WaterEndpointNode } from '@/components/domains/water/water-endpoint-node';
-import { WaterTankForm } from '@/components/domains/water/water-tank-form';
-import { WaterPropertiesWidget } from '@/components/domains/water/water-properties-widget';
-import { NetworkListManager } from '@/components/domains/water/network-list-manager';
-import { AnalysisReport } from '@/components/domains/water/analysis-report';
+import { SmartNode } from '@/components/canvas/smart-node';
+import { GenericNode } from '@/components/canvas/generic-node';
+
+// Import des composants spécifiques au domaine (Renommés et déplacés)
+import { EndpointNode } from '@/components/domains/surface_treatment/endpoint-node';
+import { StreamConnectionWidget } from '@/components/domains/surface_treatment/stream-connection-widget';
+import { NetworkManager } from '@/components/domains/surface_treatment/network-manager';
+import { ProcessReport } from '@/components/domains/surface_treatment/process-report';
 
 // Définition des types de slots disponibles pour l'injection
 type ComponentMap = {
@@ -16,44 +18,45 @@ type ComponentMap = {
 
 // --- LE REGISTRE ---
 const REGISTRY: Record<string, ComponentMap> = {
-  // CONFIGURATION POUR LE DOMAINE "WATER"
-  WATER: {
+  // DOMAINE UNIQUE : SURFACE TREATMENT (Nettoyé)
+  SURFACE_TREATMENT: {
     nodes: {
-      TANK: WaterNode,
-      SINK: WaterEndpointNode,
-      SOURCE: WaterEndpointNode,
-      WATER_MAINS: WaterEndpointNode,
+      // Les équipements principaux utilisent le SmartNode générique (Cartes Riches)
+      PROCESS_BATH: SmartNode,
+      RINSE_TANK: SmartNode,
+      EVAPORATOR: SmartNode,
+      STORAGE_TANK: SmartNode,
+      
+      // Les terminaux utilisent le visuel spécifique "Pilule"
+      DRAIN: EndpointNode,
+      SOURCE: EndpointNode
     },
     forms: {
-      TANK: WaterTankForm, // Remplace le formulaire générique pour les Tanks
+      // Plus besoin de formulaires spécifiques ! 
+      // Le PropertiesPanel générique gère maintenant les Collections (Chimie) nativement.
     },
     widgets: {
-      TANK: WaterPropertiesWidget, // S'ajoute en plus du formulaire
-      SINK: WaterPropertiesWidget,    
-      SOURCE: WaterPropertiesWidget,
+      // Widget pour connecter les flux globaux (Bus Projet)
+      PROCESS_BATH: StreamConnectionWidget,
+      RINSE_TANK: StreamConnectionWidget,
+      DRAIN: StreamConnectionWidget,
+      SOURCE: StreamConnectionWidget,
     },
     panels: {
-      EMPTY_SELECTION: NetworkListManager, // S'affiche quand rien n'est sélectionné
+      // Affiche la liste des réseaux quand on clique dans le vide
+      EMPTY_SELECTION: NetworkManager 
     },
     reports: {
-      SUMMARY: AnalysisReport
+      SUMMARY: ProcessReport
     }
-  },
-  
-  // CONFIGURATION POUR LE DOMAINE "ENERGY" (Exemple futur)
-  ENERGY: {
-    nodes: {}, // Utiliserait des composants électriques
-    forms: {},
-    widgets: {},
-    panels: {},
-    reports: {}
   }
 };
 
 // --- HELPERS D'ACCÈS ---
 
 export function getDomainNode(domain: string, type: string) {
-  return REGISTRY[domain]?.nodes[type] || undefined; // Renvoie undefined pour utiliser le GenericNode
+  // Si pas de composant spécifique, on renvoie GenericNode par défaut
+  return REGISTRY[domain]?.nodes[type] || GenericNode; 
 }
 
 export function getDomainForm(domain: string, type: string) {

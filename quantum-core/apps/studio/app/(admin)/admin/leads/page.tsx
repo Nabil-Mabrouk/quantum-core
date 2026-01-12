@@ -27,7 +27,7 @@ export default async function LeadsAdminPage() {
               <Home className="w-3 h-3" /> Accueil
             </Link>
             <span>/</span>
-            <Link href="/admin/stats" className="hover:text-blue-600 transition-colors">Administration</Link>
+            <Link href="/admin" className="hover:text-blue-600 transition-colors">Administration</Link>
             <span>/</span>
             <span className="text-blue-600">Leads</span>
           </nav>
