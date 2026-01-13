@@ -1,8 +1,21 @@
 'use server';
 
 import { db } from '@repo/database';
+import { auth } from "@/auth";
+
+// --- SECURITY HELPER ---
+
+async function requireAdmin() {
+  const session = await auth();
+  // @ts-ignore
+  if (session?.user?.role !== 'ADMIN') {
+    throw new Error("Non autorisé: Accès administrateur requis.");
+  }
+}
 
 export async function seedCatalog() {
+  await requireAdmin();
+  
   const items = [
     {
       domain: "WATER",

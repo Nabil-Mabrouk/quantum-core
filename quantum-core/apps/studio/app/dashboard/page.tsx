@@ -1,97 +1,80 @@
 import { db } from '@repo/database';
-import { createProjectAction } from '@/app/actions/project';
 import { ProjectCard } from '@/components/dashboard/project-card';
 import { SideNav } from '@/components/layout/shell/side-nav';
 import { UniversalHeader } from '@/components/layout/shell/universal-header';
-import { Plus, LayoutGrid, Search, Filter } from 'lucide-react';
-import { getAvailableDomains } from '@/lib/registry'; // <--- Import pour récupérer la liste des domaines
+import { LayoutGrid, Search, Filter } from 'lucide-react';
+import { CreateProjectModal } from '@/components/dashboard/create-project-modal';
+import { auth } from "@/auth"; // Importe l'utilitaire d'auth
 
 export default async function DashboardPage() {
-  // 1. Récupération des données en parallèle (Performance)
-  const [projects, availableDomains] = await Promise.all([
-    db.project.findMany({
-      orderBy: { updatedAt: 'desc' },
-      include: { systems: true }
-    }),
-    // On récupère la liste des domaines configurés (Water, Surface Treatment, etc.)
-    Promise.resolve(getAvailableDomains()) 
-  ]);
+  const session = await auth();
+  if (!session?.user?.id) {
+    return <div className="flex items-center justify-center h-screen">
+      <p className="text-red-500 font-bold">Accès non autorisé. Veuillez vous connecter.</p>
+    </div>;
+  }
+  // Récupération des projets triés par mise à jour récente
+  const projects = await db.project.findMany({
+    orderBy: { updatedAt: 'desc' },
+    include: { systems: true }
+  });
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white">
-      {/* 1. SIDEBAR GLOBALE */}
+      {/* 1. BARRE DE NAVIGATION LATÉRALE (Stable) */}
       <SideNav />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* 2. HEADER UNIFIÉ */}
+        {/* 2. HEADER UNIFIÉ (Contexte Dashboard) */}
         <UniversalHeader />
 
-        {/* 3. CONTENU PRINCIPAL SCROLLABLE */}
+        {/* 3. ZONE DE CONTENU PRINCIPALE */}
         <main className="flex-1 overflow-y-auto bg-slate-50/50 p-8 lg:p-12">
           <div className="max-w-7xl mx-auto space-y-10">
             
-            {/* Header de section & Nouveau Projet */}
+            {/* EN-TÊTE DE SECTION : Titre & Action Primaire */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div>
-                <h1 className="text-4xl font-black text-slate-900 tracking-tighter">Mes Projets</h1>
-                <p className="text-slate-500 mt-1 font-medium italic">Gérez vos jumeaux numériques industriels.</p>
+                <h1 className="text-4xl font-black text-slate-900 tracking-tighter">Mes Études</h1>
+                <p className="text-slate-500 mt-1 font-medium italic">Cockpit de gestion des jumeaux numériques industriels.</p>
               </div>
 
-              {/* FORMULAIRE DE CRÉATION RAPIDE */}
-              <form action={createProjectAction} className="flex gap-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
-                
-                {/* Input Nom */}
-                <input 
-                  name="name" 
-                  placeholder="Nom du projet..." 
-                  className="bg-slate-50 border-none rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 w-48 lg:w-64 transition-all"
-                  required
-                />
-
-                {/* Sélecteur de Domaine (Dynamique) */}
-                <div className="relative border-l border-slate-100 pl-2">
-                    <select 
-                        name="domain" 
-                        className="h-full bg-transparent text-xs font-bold text-slate-600 outline-none cursor-pointer hover:text-blue-600 transition-colors pr-2"
-                        defaultValue="SURFACE_TREATMENT"
-                    >
-                        {availableDomains.map((domain) => (
-                            <option key={domain.id} value={domain.id}>
-                                {domain.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Bouton Submit */}
-                <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg shadow-blue-500/20">
-                  <Plus className="w-4 h-4" /> Créer
-                </button>
-              </form>
+              {/* UTILISATION DE LA NOUVELLE MODALE DE CRÉATION RICHE */}
+              <CreateProjectModal />
             </div>
 
-            {/* Barre de recherche et filtres rapide */}
-            <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-200 shadow-sm">
+            {/* BARRE D'OUTILS : Recherche & Filtrage */}
+            <div className="flex items-center gap-4 bg-white p-4 rounded-[2rem] border border-slate-200 shadow-sm transition-all focus-within:shadow-md focus-within:border-blue-300">
                 <div className="flex-1 relative">
                     <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-                    <input className="w-full pl-11 pr-4 py-2 bg-transparent text-sm outline-none" placeholder="Rechercher un projet par nom ou domaine..." />
+                    <input 
+                        className="w-full pl-11 pr-4 py-2 bg-transparent text-sm outline-none placeholder:text-slate-400 font-medium" 
+                        placeholder="Rechercher une étude par nom, client ou domaine..." 
+                    />
                 </div>
                 <div className="h-6 w-px bg-slate-100" />
-                <button className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
-                    <Filter className="w-4 h-4" /> Filtres
+                <button className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-all">
+                    <Filter className="w-4 h-4" /> Filtres avancés
                 </button>
             </div>
 
-            {/* Grille de Projets */}
+            {/* GRILLE DES ÉTUDES (PROJECTS) */}
             {projects.length === 0 ? (
-                <div className="py-20 text-center border-4 border-dashed border-slate-200 rounded-[3rem] space-y-4">
-                    <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
+                /* ÉTAT VIDE : Incitation à la création */
+                <div className="py-32 text-center border-4 border-dashed border-slate-200 rounded-[4rem] space-y-6 bg-white/30">
+                    <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mx-auto shadow-inner">
                         <LayoutGrid className="w-10 h-10 text-slate-300" />
                     </div>
-                    <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Aucun projet actif. Commencez par en créer un ci-dessus.</p>
+                    <div className="space-y-2">
+                        <p className="text-slate-900 font-black uppercase text-sm tracking-widest">Aucune étude active</p>
+                        <p className="text-slate-400 text-sm max-w-xs mx-auto italic">
+                            Commencez par initialiser une nouvelle étude en utilisant le bouton ci-dessus.
+                        </p>
+                    </div>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                /* GRILLE DE CARTES */
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-20">
                     {projects.map(project => (
                         <ProjectCard key={project.id} project={project} />
                     ))}

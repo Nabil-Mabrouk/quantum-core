@@ -1,19 +1,20 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { clsx } from 'clsx';
 
 interface ResizablePanelProps {
   children: React.ReactNode;
   initialWidth?: number;
   minWidth?: number;
   maxWidth?: number;
-  side?: 'left' | 'right';
+  side?: 'left' | 'right'; // 'left' pour la palette, 'right' pour les propriétés
 }
 
 export function ResizablePanel({ 
   children, 
   initialWidth = 320, 
-  minWidth = 280, 
+  minWidth = 200, 
   maxWidth = 600,
   side = 'right'
 }: ResizablePanelProps) {
@@ -27,9 +28,10 @@ export function ResizablePanel({
     if (isResizing) {
       let newWidth;
       if (side === 'right') {
-        // Pour un panneau à droite, on calcule depuis le bord droit
+        // Calcul depuis le bord droit
         newWidth = window.innerWidth - e.clientX;
       } else {
+        // Calcul depuis le bord gauche (pour la palette)
         newWidth = e.clientX;
       }
 
@@ -49,21 +51,26 @@ export function ResizablePanel({
   }, [resize, stopResizing]);
 
   return (
-    <div className="flex h-full shrink-0 relative">
-      {/* POIGNÉE DE REDIMENSIONNEMENT (À GAUCHE DU PANNEAU) */}
+    <div 
+      className="h-full flex shrink-0 relative bg-white"
+      style={{ width: `${width}px` }}
+    >
+      {/* POIGNÉE DE REDIMENSIONNEMENT */}
       <div
         onMouseDown={startResizing}
-        className={`w-1 cursor-col-resize z-50 transition-colors hover:bg-blue-500 absolute top-0 bottom-0 left-0 ${
-          isResizing ? 'bg-blue-600' : 'bg-transparent hover:bg-blue-300'
-        }`}
+        className={clsx(
+          "absolute top-0 bottom-0 w-1.5 cursor-col-resize z-50 transition-colors hover:bg-blue-500/50",
+          isResizing ? "bg-blue-600" : "bg-transparent",
+          side === 'right' ? "left-0" : "right-0" // Inversion selon le côté
+        )}
       />
       
       {/* CONTENU DU PANNEAU */}
-      <div style={{ width: `${width}px` }} className="h-full flex flex-col overflow-hidden bg-white border-l border-slate-200 shadow-xl">
+      <div className="w-full h-full flex flex-col overflow-hidden border-x border-slate-200 shadow-xl">
         {children}
       </div>
       
-      {/* OVERLAY DE SÉCURITÉ (Pour éviter que la souris ne se perde dans les iframes ou autres pendant le drag) */}
+      {/* OVERLAY DE SÉCURITÉ PENDANT LE DRAG */}
       {isResizing && <div className="fixed inset-0 z-[9999] cursor-col-resize" />}
     </div>
   );

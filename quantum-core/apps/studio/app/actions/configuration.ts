@@ -3,6 +3,17 @@
 import { db } from '@repo/database';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { auth } from "@/auth";
+
+// --- SECURITY HELPER ---
+
+async function requireAdmin() {
+  const session = await auth();
+  // @ts-ignore
+  if (session?.user?.role !== 'ADMIN') {
+    throw new Error("Non autorisé: Accès administrateur requis.");
+  }
+}
 
 // Validation du format du JSON de configuration
 const ConfigImportSchema = z.record(
@@ -24,6 +35,8 @@ const ConfigImportSchema = z.record(
  * Si une catégorie contient un tableau vide [], la configuration est supprimée (Reset).
  */
 export async function importCategorySchemas(domain: string, jsonData: any) {
+  await requireAdmin();
+  
   const validation = ConfigImportSchema.safeParse(jsonData);
   
   if (!validation.success) {

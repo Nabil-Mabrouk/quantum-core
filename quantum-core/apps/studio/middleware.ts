@@ -7,9 +7,7 @@ const { auth } = NextAuth(authConfig);
 export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
-  // @ts-ignore
-  const userRole = req.auth?.user?.role;
-
+  const userRole = (req.auth?.user as { role?: string } | undefined)?.role;
   const isAdminRoute = nextUrl.pathname.startsWith("/admin");
 
   if (isAdminRoute) {

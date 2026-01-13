@@ -5,21 +5,27 @@ import { SideNav } from '@/components/layout/shell/side-nav';
 import { UniversalHeader } from '@/components/layout/shell/universal-header';
 // NOUVEAU : Import du viewer générique
 import { GenericReportViewer } from '@/components/layout/generic-report-viewer';
-
+import { auth } from "@/auth";
 export default async function ProjectBlueprintPage(props: { 
   params: Promise<{ id: string }>,
   searchParams: Promise<{ view?: string }> 
 }) {
   const { id } = await props.params;
+  const session = await auth();
+
   const { view } = await props.searchParams;
   const currentView = view || 'map'; 
 
   // 1. Fetch project details
   const project = await db.project.findUniqueOrThrow({
-    where: { id },
+    where: { id,userId: session?.user?.id,},
     include: { systems: true, streams: true }
   });
 
+  if (!project) {
+    // Si le projet n'existe pas OU ne m'appartient pas -> 404 (pour ne pas confirmer l'existence de l'ID)
+    return <div>Projet introuvable ou accès refusé.</div>;
+  }
   // 2. Fetch topology
   const { systems, streams } = await getProjectTopology(id);
 

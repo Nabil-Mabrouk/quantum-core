@@ -15,6 +15,7 @@ import {
 import { DynamicIcon } from '@/components/ui/dynamic-icon';
 import { ResizablePanel } from '@/components/ui/resizable-panel';
 import { CatalogSelector } from '@/components/layout/catalog-selector';
+import { NodeSelector } from '@/components/ui/node-selector';
 
 // --- IMPORT DU REGISTRE ---
 import { 
@@ -98,8 +99,6 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
   const CustomWidget = isNode ? getDomainWidget(config.id, elementType) : null;
 
   // --- MOTEUR DE RENDU GÉNÉRIQUE ---
-  
-  // Fonction récursive pour afficher un champ ou une collection
   const renderField = (field: any, value: any, onChange: (val: any) => void) => {
     
     // 1. CHAMP QUANTITÉ (Physique)
@@ -132,22 +131,34 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
                 <label className="text-[9px] font-bold text-slate-400 uppercase">{field.label}</label>
                 <CatalogSelector 
                     category={field.query?.category || []} 
-                    nodeId={elementId} // Passe le contexte pour injection directe si besoin
-                    // Mais on préfère utiliser le callback générique
+                    nodeId={elementId}
                     onSelect={(item: any) => onChange(item.id)}
                     label={value ? "Changer sélection" : "Choisir..."}
                 />
-                {value && <p className="text-xs font-bold text-blue-600 mt-1 truncate">ID: {value}</p>}
+                {value && <p className="text-[10px] font-mono text-blue-600 mt-1 truncate opacity-70">{value}</p>}
             </div>
         );
     }
 
-    // 3. COLLECTION (Tableau Récursif)
+    // 3. SÉLECTEUR DE NOEUD (Wireless connections)
+    if (field.type === 'node-selector') {
+      return (
+        <div key={field.id} className="space-y-1">
+          <label className="text-[9px] font-bold text-slate-400 uppercase">{field.label}</label>
+          <NodeSelector
+            value={value}
+            onChange={onChange}
+            filter={field.filter}
+          />
+        </div>
+      );
+    }
+
+    // 4. COLLECTION (Tableau Récursif)
     if (field.type === 'collection') {
         const items = Array.isArray(value) ? value : (field.default || []);
         
         const addItem = () => {
-            // Crée un objet vide avec les valeurs par défaut du sous-schéma
             const newItem = field.schema.reduce((acc: any, f: any) => ({ ...acc, [f.id]: f.default }), {});
             onChange([...items, newItem]);
         };
@@ -191,17 +202,12 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
                             </button>
                         </div>
                     ))}
-                    {items.length === 0 && (
-                        <div className="text-center py-4 border-2 border-dashed border-slate-100 rounded-xl">
-                            <p className="text-[10px] text-slate-300 italic">Aucun élément dans la liste</p>
-                        </div>
-                    )}
                 </div>
             </div>
         );
     }
 
-    // 4. CHAMPS STANDARDS (String, Boolean, Select)
+    // 5. CHAMPS STANDARDS (Boolean, Select, String)
     switch (field.type) {
       case 'boolean': return (
         <div key={field.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-all">
@@ -212,7 +218,8 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
       case 'select': return (
         <div key={field.id} className="space-y-1">
           <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><List className="w-3 h-3" /> {field.label}</label>
-          <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer">
+          <select value={value || ""} onChange={(e) => onChange(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer">
+             <option value="">Sélectionner...</option>
              {field.options?.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
           </select>
         </div>
@@ -220,7 +227,7 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
       default: return (
         <div key={field.id} className="space-y-1">
           <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><Type className="w-3 h-3" /> {field.label}</label>
-          <input type="text" value={value} onChange={(e) => onChange(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20" />
+          <input type="text" value={value || ""} onChange={(e) => onChange(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20" />
         </div>
       );
     }
@@ -251,7 +258,6 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-        {/* NOMMAGE (Toujours présent pour les noeuds) */}
         {isNode && (
           <div className="space-y-2">
             <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1">
@@ -266,14 +272,12 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
           </div>
         )}
 
-        {/* WIDGETS SPÉCIFIQUES (Haut de page) */}
         {CustomWidget && (
            <div className="border-b border-slate-100 pb-8">
               <CustomWidget nodeId={elementId} />
            </div>
         )}
 
-        {/* FORMULAIRE PRINCIPAL (Générique ou Custom) */}
         {CustomForm ? (
             <CustomForm nodeId={elementId} />
         ) : (

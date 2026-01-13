@@ -1,0 +1,81 @@
+---
+title: "Documentation Technique : Le Manifeste du Domaine Traitement de Surface"
+slug: "doc-manifeste-surface-treatment"
+published: true
+tags: "Documentation, Surface Treatment, Configuration, Physics"
+---
+
+# Le Manifeste du Domaine : Le Cerveau du Traitement de Surface
+
+Dans l'architecture **Quantum Core**, le fichier `surface-treatment.ts` n'est pas un simple fichier de données. C'est le **contrat technique** qui définit comment le logiciel doit interpréter la physique, l'interface utilisateur et les calculs pour l'industrie du traitement de surface et de la chimie industrielle.
+
+Ce manifeste permet de transformer un éditeur de graphe générique en un outil expert capable de résoudre des bilans de masse complexes, de gérer l'évaporation et d'estimer des investissements (CAPEX).
+
+---
+
+## 1. Structure des Bibliothèques (Libraries)
+
+Le manifeste définit deux bibliothèques distinctes pour séparer les objets "intelligents" (chimie) des objets "physiques" (matériel).
+
+*   **Chimie (`chemistry`)** : Configurée en type `COMPOUND`. Cela signifie qu'elle supporte la récursivité. Un produit (ex: Acide) est composé d'unités de base (Ions). C'est ce qui permet au solveur de suivre la trace du Sodium ou du Chlore à travers toute l'usine.
+*   **Matériel (`hardware`)** : Configurée en type `SIMPLE`. Elle gère les catalogues d'équipements (Pompes, Cuves, Évaporateurs) avec leurs propriétés commerciales (Prix, Puissance).
+
+---
+
+## 2. Définition des Équipements (NodeTypes)
+
+Chaque équipement (nœud) possède un `role` (SOURCE, SINK, PROCESS) et un ensemble de champs (`fields`) qui pilotent l'interface et le solveur.
+
+### A. Le Bain Actif (`PROCESS_BATH`)
+C'est le cœur de la ligne de production. Sa particularité est d'être une **source de pollution fixe**.
+*   **Champs Clés :**
+    *   `volume` & `temp` : Paramètres physiques de base.
+    *   `evaporationRate` : Couplé au profil `heating`, il permet de calculer la perte d'eau même quand l'usine ne produit pas.
+    *   `components` : Un champ de type `collection`. Il permet à l'ingénieur d'ajouter une liste illimitée de produits chimiques (ex: 50g/L de Soude + 2g/L d'additif).
+    *   `compensationSourceId` : Un lien **Wireless** (node-selector) qui définit d'où vient l'eau pour compenser l'évaporation (généralement le premier rinçage).
+
+### B. La Cuve de Rinçage (`RINSE_TANK`)
+Contrairement au bain, sa concentration est une **inconnue** que le solveur doit trouver.
+*   **Modes de Fonctionnement :** Défini par le champ `type` (CASCADE, STATIC, SPRAY).
+*   **Gestion du Spray :** Si `hasSpray` est vrai, le solveur applique le coefficient `sprayEfficiency` pour réduire la pollution emportée par les pièces vers la suite de la ligne.
+*   **Lissage des Vidanges :** Le champ `dumpingEvents` (/an) est utilisé par le solveur pour transformer un événement discret (vidange totale) en un flux continu équivalent pour le bilan de masse annuel.
+
+### C. Équipements ZLD (`EVAPORATOR` & `STORAGE_TANK`)
+Utilisés pour modéliser la station de traitement des eaux.
+*   **Évaporateur :** Définit un `recoveryRate` (ex: 90%). Le solveur divise automatiquement le flux entrant en deux : un distillat propre (90%) et un concentrât pollué (10%).
+
+---
+
+## 3. Logique des Propriétés de Champs
+
+Le manifeste utilise des drapeaux spécifiques pour automatiser l'expérience utilisateur :
+
+| Propriété | Description |
+| :--- | :--- |
+| `isSummary: true` | Le champ s'affiche directement sur la carte dans le graphe (ex: Température). |
+| `timeProfile` | Lie le champ à un profil temporel du projet (Production, Chauffage). Crucial pour la précision des bilans annuels. |
+| `unitFamily` | Identifie la nature physique (Volume, Flow, Mass). Prépare le terrain pour les conversions d'unités automatiques. |
+| `node-selector` | Active le mode **Wireless**. Permet de lier deux nœuds par propriété sans dessiner de ligne (évite le "plat de spaghettis"). |
+
+---
+
+## 4. Connectivité (EdgeTypes)
+
+Le manifeste définit le lien `PIPE`. Il possède deux modes :
+1.  **OVERFLOW (Surverse) :** Le débit est calculé dynamiquement par le solveur (ce qui entre doit ressortir).
+2.  **PUMP (Pompage) :** L'utilisateur impose un débit fixe. Si ce débit est supérieur aux entrées, le logiciel génère une alerte de niveau bas.
+
+---
+
+## 5. Impact sur le Solveur Python
+
+Le manifeste est envoyé au moteur de calcul avec le graphe. Le solveur Python utilise les `id` du manifeste pour construire ses matrices :
+*   Chaque `collection` de `components` génère une ligne dans le vecteur source **B**.
+*   Chaque `node-selector` crée une arête virtuelle dans la matrice de transport **A**.
+*   Les `timeProfile` ajustent les coefficients de la matrice pour normaliser les flux sur une base "Heures de Production".
+
+---
+
+## Conclusion
+
+Le fichier `surface-treatment.ts` est l'unique source de vérité pour le métier. Pour ajouter une nouvelle fonctionnalité (ex: un capteur de pH ou un coût carbone), il suffit d'ajouter un champ dans ce fichier. L'interface (Properties Panel) et le solveur s'adapteront automatiquement.

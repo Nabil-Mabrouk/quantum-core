@@ -52,6 +52,14 @@ export type FieldDefinition =
       query: LibraryQuery; 
       default?: string; 
     }
+  // NOUVEAU: Sélecteur de Nœud
+  | { 
+      id: string; 
+      label: string; 
+      type: 'node-selector'; 
+      filter?: string[]; // Tableau de types de nœuds autorisés (ex: ['DRAIN', 'TANK'])
+      category?: string; // Tag pour le regroupement visuel (ex: Inlet, Outlet, Utility)
+    }
   // 6. Collection / Tableau (Support Natif)
   | {
       id: string;

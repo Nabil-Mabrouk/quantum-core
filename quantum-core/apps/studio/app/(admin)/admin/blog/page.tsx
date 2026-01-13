@@ -2,8 +2,18 @@ import { db } from "@repo/database";
 import { BlogBatchTools } from "@/components/admin/blog-batch-tools";
 import { Edit, Eye, Trash, CheckCircle, Clock, Home, ArrowLeft, Plus } from "lucide-react";
 import Link from "next/link";
+import { auth } from "@/auth"; // 🛡️ Ajouté pour la sécurité
+import { redirect } from "next/navigation"; // 🛡️ Ajouté
+import { createPostAction } from "@/app/actions/admin-blog";
+import { BlogDeleteButton } from "@/components/admin/blog-delete-button";
 
 export default async function AdminBlogPage() {
+  // 🛡️ 1. VERIFICATION DE SECURITE (Analyse de l'expert)
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") {
+    redirect("/dashboard");
+  }
+
   const domain = process.env.NEXT_PUBLIC_ACTIVE_DOMAIN || "WATER";
   
   const posts = await db.post.findMany({
@@ -39,21 +49,23 @@ export default async function AdminBlogPage() {
             >
                 <ArrowLeft className="w-4 h-4" /> Quitter l'Admin
             </Link>
-            <Link 
-                href="/admin/blog/new" 
-                className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:bg-black transition-all flex items-center gap-2"
-            >
-                <Plus className="w-4 h-4" /> Nouvel Article
-            </Link>
+            
+            {/* ✅ FORMULAIRE POUR LE BOUTON D'ACTION */}
+            <form action={createPostAction}>
+                <button 
+                    type="submit"
+                    className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-black transition-all flex items-center gap-2"
+                >
+                    <Plus className="w-4 h-4" /> Nouvel Article
+                </button>
+            </form>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto space-y-8">
         
-        {/* OUTILS DE SYNCHRONISATION ZIP */}
         <BlogBatchTools />
 
-        {/* TABLEAU DES ARTICLES */}
         <div className="bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm shadow-slate-200/50">
             <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50/50 border-b border-slate-100">
@@ -93,7 +105,6 @@ export default async function AdminBlogPage() {
                     </td>
                     <td className="p-6 text-right">
                     <div className="flex justify-end gap-2">
-                        {/* Voir sur le site public */}
                         <Link 
                             href={`/blog/${post.slug}`} 
                             target="_blank"
@@ -101,17 +112,14 @@ export default async function AdminBlogPage() {
                         >
                             <Eye className="w-4 h-4" />
                         </Link>
-                        {/* Editer */}
                         <Link 
                             href={`/admin/blog/${post.id}`} 
                             className="p-2.5 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 transition-all"
                         >
                             <Edit className="w-4 h-4" />
                         </Link>
-                        {/* Supprimer */}
-                        <button className="p-2.5 bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
-                            <Trash className="w-4 h-4" />
-                        </button>
+                        
+                        <BlogDeleteButton postId={post.id} postTitle={post.title} />
                     </div>
                     </td>
                 </tr>

@@ -39,12 +39,12 @@ async function getAuthenticatedSystem(systemId: string) {
  * Charge les noeuds et les liens pour un système donné.
  */
 export async function loadGraph(systemId: string) {
+  
+
   if (!systemId) return { nodes: [], edges: [] };
 
   try {
-    // 1. VÉRIFICATION DE SÉCURITÉ
     await getAuthenticatedSystem(systemId);
-
     // 2. CHARGEMENT PARALLÈLE
     const [rawNodes, rawEdges] = await Promise.all([
       db.node.findMany({ where: { systemId } }),
@@ -83,110 +83,84 @@ export async function loadGraph(systemId: string) {
 /**
  * Sauvegarde complète du graphe par synchronisation (Batch)
  */
-export async function saveGraph(
-  systemId: string, 
-  nodes: any[], 
-  edges: any[], 
-  sequences: any[]
-) {
-  if (!systemId) return { success: false, error: "ID de système manquant" };
+export async function saveGraph(systemId: string, nodes: any[], edges: any[], sequences: any[]) {
+  if (!systemId) return { success: false, error: "ID manquant" };
 
   try {
-    // 1. Verify ownership first
     await getAuthenticatedSystem(systemId);
 
-    const nodeIds = nodes.map(n => n.id);
-    const edgeIds = edges.map(e => e.id);
-    const sequenceIds = sequences.map(s => s.id);
+    return await db.$transaction(async (tx) => {
+      // 1. Suppression parallèle de l'ancien état pour ce système
+      await Promise.all([
+        tx.edge.deleteMany({ where: { systemId } }),
+        tx.sequenceStep.deleteMany({ where: { sequence: { systemId } } }),
+        tx.sequence.deleteMany({ where: { systemId } }),
+        tx.node.deleteMany({ where: { systemId } })
+      ]);
 
-    await db.$transaction(async (tx) => {
-      // --- NODES: DIFF SYNC ---
-      // Delete nodes that are no longer present in the editor
-      await tx.node.deleteMany({ 
-        where: { systemId, id: { notIn: nodeIds } } 
-      });
-
-      // Upsert nodes (Update if exists, Create if new)
-      for (const node of nodes) {
-        await tx.node.upsert({
-          where: { id: node.id },
-          update: {
-            positionX: node.position.x,
-            positionY: node.position.y,
-            label: node.data.label,
-            properties: node.data.properties || {},
-          },
-          create: {
+      // 2. Ré-insertion massive des NODES
+      if (nodes.length > 0) {
+        await tx.node.createMany({
+          data: nodes.map(node => ({
             id: node.id,
-            systemId, // Renommé de lineId à systemId
+            systemId,
             positionX: node.position.x,
             positionY: node.position.y,
-            type: node.data.type,
+            type: node.type,
             label: node.data.label,
             role: node.data.role || 'PROCESS',
             properties: node.data.properties || {},
-          },
+          }))
         });
       }
 
-      // --- EDGES: DIFF SYNC ---
-      await tx.edge.deleteMany({ 
-        where: { systemId, id: { notIn: edgeIds } } 
-      });
-
-      for (const edge of edges) {
-        await tx.edge.upsert({
-          where: { id: edge.id },
-          update: {
-            sourceId: edge.source,
-            targetId: edge.target,
-            properties: edge.data || {},
-          },
-          create: {
+      // 3. Ré-insertion massive des EDGES
+      if (edges.length > 0) {
+        await tx.edge.createMany({
+          data: edges.map(edge => ({
             id: edge.id,
-            systemId, // Renommé de lineId à systemId
+            systemId,
             sourceId: edge.source,
             targetId: edge.target,
             properties: edge.data || {},
             category: 'PHYSICAL',
-          },
+          }))
         });
       }
 
-      // --- SEQUENCES: CLEAN REORDERING ---
-      // On supprime les steps des séquences appartenant à ce système
-      await tx.sequenceStep.deleteMany({ where: { sequence: { systemId } } });
-      
-      // On supprime les séquences qui ne sont plus présentes
-      await tx.sequence.deleteMany({ 
-        where: { systemId, id: { notIn: sequenceIds } } 
-      });
-
-      for (const seq of sequences) {
-        await tx.sequence.upsert({
-          where: { id: seq.id },
-          update: { name: seq.name, properties: seq.properties || {} },
-          create: { id: seq.id, systemId, name: seq.name, properties: seq.properties || {} }
+      // 4. Ré-insertion optimisée des SEQUENCES (Gammes)
+      if (sequences.length > 0) {
+        // 4a. Création de toutes les séquences en un seul batch
+        await tx.sequence.createMany({
+          data: sequences.map(seq => ({
+            id: seq.id,
+            systemId,
+            name: seq.name,
+            properties: seq.properties || {},
+          }))
         });
 
-        if (seq.steps.length > 0) {
+        // 4b. Préparation de toutes les étapes de toutes les séquences
+        const allSteps = sequences.flatMap(seq => 
+          seq.steps.map((nodeId: string, index: number) => ({
+            sequenceId: seq.id,
+            nodeId,
+            order: index
+          }))
+        );
+        
+        // 4c. Création de toutes les étapes en un seul batch
+        if (allSteps.length > 0) {
           await tx.sequenceStep.createMany({
-            data: seq.steps.map((nodeId: string, index: number) => ({
-              sequenceId: seq.id,
-              nodeId,
-              order: index
-            }))
+            data: allSteps
           });
         }
       }
-    });
 
-    // Revalidation du cache pour rafraîchir l'interface
-    // Note: Assurez-vous que le chemin correspond à votre routing. 
-    // Si vous êtes sur /editor/[projectId], revalidatePath('/editor/[projectId]') est mieux,
-    // mais ici on garde la logique précédente adaptée.
-    revalidatePath(`/editor/${systemId}`); 
-    return { success: true };
+      return { success: true };
+    }, {
+      timeout: 20000 // Timeout augmenté à 20s pour les grosses transactions
+    });
   } catch (error: any) {
     console.error("Save Error:", error);
     return { success: false, error: error.message };
