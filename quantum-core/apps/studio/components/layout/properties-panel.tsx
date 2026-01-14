@@ -16,6 +16,9 @@ import { DynamicIcon } from '@/components/ui/dynamic-icon';
 import { ResizablePanel } from '@/components/ui/resizable-panel';
 import { CatalogSelector } from '@/components/layout/catalog-selector';
 import { NodeSelector } from '@/components/ui/node-selector';
+import { t, getDictionary } from '@/lib/i18n'; // Import i18n
+import { useParams } from 'next/navigation'; // 1. Import
+import { Locale } from '@/lib/i18n'; // 2. Import du type
 
 // --- IMPORT DU REGISTRE ---
 import { 
@@ -42,6 +45,11 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
   const onNodesChange = useCanvasStore(state => state.onNodesChange);
   const onEdgesChange = useCanvasStore(state => state.onEdgesChange);
 
+  // i18n context (à lier à votre état global de langue plus tard)
+  const params = useParams(); // 3. Récupère les paramètres d'URL
+  const locale = (params.locale as Locale) || 'fr'; // 4. Dynamique !
+  const dict = getDictionary(locale);
+
   // 2. SORTIE PRÉCOCE
   if (viewMode === 'SUMMARY') return null;
 
@@ -60,7 +68,9 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
                 <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 border border-slate-200">
                   <Settings2 className="w-8 h-8 text-slate-300" />
                 </div>
-                <p className="text-sm font-bold text-slate-400">Sélectionnez un élément<br/>pour le configurer.</p>
+                <p className="text-sm font-bold text-slate-400">
+                    {dict.ui.none || "Sélectionnez un élément"}
+                </p>
              </div>
            )}
         </div>
@@ -94,14 +104,10 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
     else updateEdgeProperties(elementId, { [key]: value });
   };
 
-  // --- COMPOSANTS CUSTOM (Legacy ou Spécifique) ---
-  const CustomForm = isNode ? getDomainForm(config.id, elementType) : null;
-  const CustomWidget = isNode ? getDomainWidget(config.id, elementType) : null;
-
   // --- MOTEUR DE RENDU GÉNÉRIQUE ---
   const renderField = (field: any, value: any, onChange: (val: any) => void) => {
     
-    // 1. CHAMP QUANTITÉ (Physique)
+    // 1. CHAMP QUANTITÉ / NOMBRE
     if (field.type === 'quantity' || field.type === 'number') {
         const displayValue = value ?? field.default ?? 0;
         return (
@@ -109,7 +115,7 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
                 <div className="flex justify-between items-center">
                     <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1">
                         {field.unitFamily === 'mass' || field.unitFamily === 'concentration' ? <Scale className="w-3 h-3" /> : <Hash className="w-3 h-3" />}
-                        {field.label}
+                        {t(field.label, locale)}
                     </label>
                     {field.unit && <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">{field.unit}</span>}
                 </div>
@@ -124,27 +130,27 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
         );
     }
 
-    // 2. SÉLECTEUR DE BIBLIOTHÈQUE (Avec Filtre)
+    // 2. SÉLECTEUR DE BIBLIOTHÈQUE (Catalogues)
     if (field.type === 'library-selector') {
         return (
             <div key={field.id} className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase">{field.label}</label>
+                <label className="text-[9px] font-bold text-slate-400 uppercase">{t(field.label, locale)}</label>
                 <CatalogSelector 
                     category={field.query?.category || []} 
                     nodeId={elementId}
                     onSelect={(item: any) => onChange(item.id)}
                     label={value ? "Changer sélection" : "Choisir..."}
                 />
-                {value && <p className="text-[10px] font-mono text-blue-600 mt-1 truncate opacity-70">{value}</p>}
+                {value && <p className="text-[10px] font-mono text-blue-600 mt-1 truncate opacity-70">ID: {value}</p>}
             </div>
         );
     }
 
-    // 3. SÉLECTEUR DE NOEUD (Wireless connections)
+    // 3. SÉLECTEUR DE NOEUD (Liaisons Wireless)
     if (field.type === 'node-selector') {
       return (
         <div key={field.id} className="space-y-1">
-          <label className="text-[9px] font-bold text-slate-400 uppercase">{field.label}</label>
+          <label className="text-[9px] font-bold text-slate-400 uppercase">{t(field.label, locale)}</label>
           <NodeSelector
             value={value}
             onChange={onChange}
@@ -154,7 +160,7 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
       );
     }
 
-    // 4. COLLECTION (Tableau Récursif)
+    // 4. COLLECTION (Tableau / Nesting d'accessoires)
     if (field.type === 'collection') {
         const items = Array.isArray(value) ? value : (field.default || []);
         
@@ -177,10 +183,10 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
             <div key={field.id} className="pt-4 border-t border-slate-100">
                 <div className="flex justify-between items-center mb-3">
                     <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-2">
-                        <List className="w-3 h-3" /> {field.label}
+                        <List className="w-3 h-3" /> {t(field.label, locale)}
                     </label>
                     <button onClick={addItem} className="flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-lg text-[9px] font-bold uppercase transition-all">
-                        <Plus className="w-3 h-3" /> Ajouter
+                        <Plus className="w-3 h-3" /> {dict.ui.add}
                     </button>
                 </div>
                 
@@ -207,51 +213,59 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
         );
     }
 
-    // 5. CHAMPS STANDARDS (Boolean, Select, String)
+    // 5. CHAMPS STANDARDS
     switch (field.type) {
       case 'boolean': return (
         <div key={field.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-all">
-          <div className="flex items-center gap-2"><ToggleLeft className="w-4 h-4 text-slate-400" /><span className="text-[10px] font-bold text-slate-600 uppercase">{field.label}</span></div>
+          <div className="flex items-center gap-2"><ToggleLeft className="w-4 h-4 text-slate-400" /><span className="text-[10px] font-bold text-slate-600 uppercase">{t(field.label, locale)}</span></div>
           <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 accent-blue-600 cursor-pointer" />
         </div>
       );
       case 'select': return (
         <div key={field.id} className="space-y-1">
-          <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><List className="w-3 h-3" /> {field.label}</label>
+          <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><List className="w-3 h-3" /> {t(field.label, locale)}</label>
           <select value={value || ""} onChange={(e) => onChange(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer">
-             <option value="">Sélectionner...</option>
-             {field.options?.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
+             <option value="">{dict.ui.none}</option>
+             {field.options?.map((opt: any) => (
+                <option key={opt.value || opt} value={opt.value || opt}>
+                  {t(opt.label || opt, locale)}
+                </option>
+             ))}
           </select>
         </div>
       );
       default: return (
         <div key={field.id} className="space-y-1">
-          <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><Type className="w-3 h-3" /> {field.label}</label>
+          <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><Type className="w-3 h-3" /> {t(field.label, locale)}</label>
           <input type="text" value={value || ""} onChange={(e) => onChange(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20" />
         </div>
       );
     }
   };
 
+  // --- RÉCUPÉRATION DES COMPOSANTS DOMAINE ---
+  const CustomForm = isNode ? getDomainForm(config.id, elementType) : null;
+  const CustomWidget = isNode ? getDomainWidget(config.id, elementType) : null;
+
   return (
     <ResizablePanel initialWidth={360}>
       <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-start shrink-0">
         <div>
-          <div className={`flex items-center gap-2 mb-1 text-${schema?.color || 'slate-500'}`}>
+          <div className={`flex items-center gap-2 mb-1 text-${schema?.color?.split('-')[0] || 'slate'}-500`}>
             {schema?.iconName && <DynamicIcon name={schema.iconName} className="w-4 h-4" />}
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              {isNode ? "Configuration" : "Liaison"}
+              {isNode ? t(schema?.category, locale) : "Liaison"}
             </span>
           </div>
           <h3 className="text-lg font-black text-slate-900 leading-none truncate max-w-[200px]">
-            {schema?.label || "Élément"}
+            {t(schema?.label, locale) || "Élément"}
           </h3>
         </div>
         
         <button 
           onClick={() => isNode ? onNodesChange([{ id: elementId, type: 'remove' }]) : onEdgesChange([{ id: elementId, type: 'remove' }])} 
           className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" 
-          title="Supprimer"
+          title={dict.ui.delete}
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -282,6 +296,9 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
             <CustomForm nodeId={elementId} />
         ) : (
             <div className="space-y-6">
+                <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                    <FileText className="w-3 h-3" /> Caractéristiques
+                </h4>
                 {schema?.fields && schema.fields.length > 0 ? (
                     <div className="space-y-5">
                         {schema.fields.map((field: any) => 

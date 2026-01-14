@@ -1,19 +1,15 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  // 1. Chemins à scanner pour les classes CSS
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./lib/**/*.{js,ts,jsx,tsx,mdx}",
-    // Si vous utilisez des composants depuis le dossier packages/ui
-    "../../packages/ui/src/**/*.{js,ts,jsx,tsx}",
   ],
-
   theme: {
     extend: {
-      // Configuration des animations utilisées dans vos modales et consoles
+      // 1. Définition des Keyframes (les mouvements)
       keyframes: {
         "accordion-down": {
           from: { height: "0" },
@@ -23,40 +19,30 @@ const config: Config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        // Animation pour l'effet de brillance sur la carte "Engine"
+        shine: {
+          from: { backgroundPosition: '0 0' },
+          to: { backgroundPosition: '-200% 0' },
+        },
+        // Animation pour le texte dégradé du Hero
+        gradient: {
+          "0%, 100%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+        },
       },
+      // 2. Définition des utilitaires d'animation
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "shine": "shine 2s linear infinite",
+        "gradient": "gradient 8s linear infinite",
+        "ping-slow": "ping 3s cubic-bezier(0, 0, 0.2, 1) infinite", // Pour les nœuds du graphe
       },
     },
   },
-
-  // 2. LA SAFELIST (CRUCIAL pour Quantum Core)
-  // On force Tailwind à générer les variantes de couleurs pour tous vos domaines
-  safelist: [
-    {
-      pattern: /^(bg|text|border|ring)-(blue|purple|emerald|orange|slate|red|amber)-(50|100|200|300|400|500|600|700|800|900)$/,
-      variants: ['hover', 'group-hover', 'focus', 'active'],
-    },
-    {
-      pattern: /^ring-(blue|purple|emerald|orange|slate|red|amber)-500\/20$/, // Pour les effets focus-ring
-    },
-    // Classes spécifiques pour les animations Tailwind-animate
-    'animate-in',
-    'fade-in',
-    'zoom-in-95',
-    'slide-in-from-top-2',
-    'slide-in-from-bottom-10',
-    'duration-200',
-    'duration-300',
-    'duration-500',
-    'duration-700',
-    'duration-1000'
-  ],
-
   plugins: [
-    require("@tailwindcss/typography"), // Pour le MarkdownViewer
-    require("tailwindcss-animate"),      // Pour les animations fluides (facultatif si vous gérez à la main)
+    require("@tailwindcss/typography"),
+    require("tailwindcss-animate"), // <--- INDISPENSABLE pour animate-in, fade-in, etc.
   ],
 };
 

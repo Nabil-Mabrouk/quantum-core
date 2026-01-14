@@ -9,6 +9,7 @@ import { importCategorySchemas } from '@/app/actions/configuration';
 import { ReferenceItemEditor } from './reference-item-editor'; 
 import { getDomainConfig } from '@/lib/registry';
 import { toast } from "sonner";
+import { t } from '@/lib/i18n'; // Assurez-vous que l'import est correct
 
 interface LibraryManagerProps {
   allItems: any[];
@@ -19,14 +20,13 @@ interface LibraryManagerProps {
 export function LibraryManager({ allItems, domain, dynamicSchemas }: LibraryManagerProps) {
   const config = getDomainConfig();
   const [activeTab, setActiveTab] = useState(config.libraries[0]?.id || 'units');
+  const locale = 'fr'; // Définir la langue ou la récupérer dynamiquement
 
   // --- IMPORT DES DONNÉES (ITEMS) ---
   const handleDataUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // On enveloppe la lecture du fichier et l'action serveur dans une Promise
-    // pour que Sonner puisse gérer les états (Loading / Success / Error)
     const promise = new Promise((resolve, reject) => {
       const reader = new FileReader();
       
@@ -52,7 +52,6 @@ export function LibraryManager({ allItems, domain, dynamicSchemas }: LibraryMana
     toast.promise(promise, {
       loading: 'Importation des données en cours...',
       success: (count) => {
-        // On recharge la page pour afficher les nouvelles données
         window.location.reload();
         return `Succès : ${count} éléments importés.`;
       },
@@ -103,7 +102,7 @@ export function LibraryManager({ allItems, domain, dynamicSchemas }: LibraryMana
         <TabsList className="bg-slate-100 p-1 rounded-xl">
           {config.libraries.map(lib => (
             <TabsTrigger key={lib.id} value={lib.id} className="flex gap-2 text-[10px] font-black uppercase tracking-widest">
-              <Icon name={lib.iconName} className="w-3.5 h-3.5" /> {lib.label}
+              <Icon name={lib.iconName} className="w-3.5 h-3.5" /> {t(lib.label, locale)}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -112,7 +111,6 @@ export function LibraryManager({ allItems, domain, dynamicSchemas }: LibraryMana
             {/* Bouton Import Config (Champs) */}
             <label className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold uppercase cursor-pointer hover:bg-slate-200 transition-all border border-slate-200">
                 <Settings className="w-3.5 h-3.5" /> Config Fields
-                {/* On vide la value onClick pour permettre de re-uploader le même fichier si besoin */}
                 <input 
                   type="file" 
                   className="hidden" 
@@ -142,7 +140,7 @@ export function LibraryManager({ allItems, domain, dynamicSchemas }: LibraryMana
             <ReferenceItemEditor 
               allItems={allItems}
               domain={domain}
-              libraryLabel={lib.label}
+              libraryLabel={t(lib.label, locale)}
               allowedCategories={lib.categories}
               enableComposition={lib.type === 'COMPOUND'}
               dynamicSchemas={dynamicSchemas}

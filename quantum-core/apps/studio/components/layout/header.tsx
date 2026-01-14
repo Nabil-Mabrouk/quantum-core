@@ -30,7 +30,7 @@ import {
   Layers
 } from 'lucide-react';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { signOut } from "next-auth/react";
 import { ProjectSettingsModal } from './project-settings-modal';
@@ -46,6 +46,8 @@ interface HeaderProps {
 
 export function Header({ config, systems, currentSystemId, projectId }: HeaderProps) {
   const pathname = usePathname();
+  const params = useParams();
+  const locale = params.locale as string;
   const isLibrary = pathname.includes('/library');
   
   const store = useCanvasStore();
@@ -169,7 +171,7 @@ export function Header({ config, systems, currentSystemId, projectId }: HeaderPr
       <header className="h-14 border-b border-slate-200 flex items-center justify-between px-6 bg-white shrink-0 z-50 shadow-sm">
         <div className="flex items-center gap-8">
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-3">
+          <Link href={`/${locale}/dashboard`} className="flex items-center gap-3">
             <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white font-bold shadow-lg">QC</div>
             <div className="hidden lg:block">
               <h1 className="text-sm font-bold leading-none text-slate-900">Quantum Core</h1>
@@ -181,19 +183,19 @@ export function Header({ config, systems, currentSystemId, projectId }: HeaderPr
           <nav className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
               {/* NEW BLUEPRINT LINK */}
             <Link 
-              href={`/project/${projectId}`} 
+              href={`/${locale}/project/${projectId}`} 
               className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 transition-all"
             >
               <Network className="w-3 h-3" /> Blueprint
             </Link>
             <Link 
-              href={`/editor/${projectId}?systemId=${currentSystemId}`} 
+              href={`/${locale}/editor/${projectId}?systemId=${currentSystemId}`} 
               className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!isLibrary ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               <LayoutDashboard className="w-3 h-3" /> Conception
             </Link>
             <Link 
-              href="/library" 
+              href={`/${locale}/library`} 
               className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${isLibrary ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               <FlaskConical className="w-3 h-3" /> Bibliothèque
@@ -315,7 +317,7 @@ export function Header({ config, systems, currentSystemId, projectId }: HeaderPr
               </button>
               
               <button 
-                onClick={() => signOut({ callbackUrl: "/" })}
+                onClick={() => signOut({ callbackUrl: `/${locale}` })}
                 className="p-2 text-slate-400 hover:text-red-500 transition-colors"
                 title="Déconnexion"
               >

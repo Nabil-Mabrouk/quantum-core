@@ -10,6 +10,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
   session: { strategy: "jwt" },
   ...authConfig,
+  basePath: "/api/auth", // Force le chemin sans locale
   providers: [
     Nodemailer({
       server: {

@@ -5,17 +5,19 @@ import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useCanvasStore } from '@/store/canvas-store';
 import { 
   ArrowDown, ArrowRightLeft, ArrowUpRight, AlertCircle, 
-  Settings2
+  Settings2, Activity, Zap, Flame, Eye
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getDomainConfig } from '@/lib/registry';
 import { DynamicIcon } from '@/components/ui/dynamic-icon';
+import { t } from '@/lib/i18n'; // Import du moteur de traduction
 
 export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
   // 1. CONFIGURATION DU DOMAINE
   const config = getDomainConfig();
   const nodeType = data.type || 'DEFAULT'; 
   const nodeConfig = config.nodeTypes[nodeType];
+  const locale = 'fr'; // À terme, peut être récupéré via un hook contextuel
 
   // Fallback si le type de nœud n'est pas trouvé dans le manifeste
   if (!nodeConfig) {
@@ -27,38 +29,41 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
     );
   }
 
-  const labelType = nodeConfig.label;
+  const labelType = t(nodeConfig.label, locale as any);
   const iconName = nodeConfig.iconName || "Box";
   const colorBase = nodeConfig.color?.split('-')[0] || "slate"; 
 
   // 2. RÉCUPÉRATION DES DONNÉES DU STORE
   const props = data.properties || {};
-  // On ne séléctionne que les nodes pour éviter des re-renders inutiles
   const allNodes = useCanvasStore(state => state.nodes);
   
   const simResults = props.simulationResults || {};
   const warnings = simResults.warnings || [];
   
-  // 3. CHAMPS RÉSUMÉS (Définis dans le manifeste avec isSummary: true)
+  // 3. LOGIQUE DES ACCESSOIRES (NESTING / EMBARQUEMENT)
+  // On récupère la collection "accessories" définie dans le manifeste
+  const accessories = props.accessories || [];
+
+  // 4. CHAMPS RÉSUMÉS (isSummary: true)
   const summaryFields = useMemo(() => {
     return nodeConfig.fields.filter(f => (f as any).isSummary);
   }, [nodeConfig]);
 
-  // 4. LOGIQUE "WIRELESS" (Liaisons par propriétés)
+  // 5. LOGIQUE "WIRELESS" (Liaisons par propriétés)
   const wirelessLinks = useMemo(() => {
     const links = [];
     for (const [key, value] of Object.entries(props)) {
-        if (typeof value === 'string' && (key.endsWith('NetworkId') || key.endsWith('SourceId'))) {
+        if (typeof value === 'string' && (key.endsWith('NetworkId') || key.endsWith('SourceId') || key.endsWith('TargetId'))) {
             const target = allNodes.find(n => n.id === value);
             if (target) {
                 let color = "slate";
                 let icon = ArrowRightLeft;
                 let label = "Lien";
 
-                // Identification par convention de nommage
                 if (key.toLowerCase().includes('dumping')) { color = "orange"; icon = ArrowDown; label = "Vidange"; }
                 else if (key.toLowerCase().includes('overflow')) { color = "emerald"; icon = ArrowUpRight; label = "Surverse"; }
                 else if (key.toLowerCase().includes('compensation')) { color = "blue"; icon = ArrowRightLeft; label = "Appoint"; }
+                else if (key.toLowerCase().includes('distillate')) { color = "blue"; icon = ArrowUpRight; label = "Distillat"; }
 
                 links.push({ id: value, targetLabel: target.data.label, color, icon, label });
             }
@@ -67,7 +72,7 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
     return links;
   }, [props, allNodes]);
 
-  // 5. MÉTRIQUE PRINCIPALE (Simulation)
+  // 6. MÉTRIQUE PRINCIPALE (Simulation)
   const primaryMetric = useMemo(() => {
     if (simResults.concentrations) {
         const entries = Object.entries(simResults.concentrations);
@@ -75,7 +80,6 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
             return { label: entries[0][0], value: Number(entries[0][1]), unit: "g/L" };
         }
     }
-    if (simResults.power) return { label: "Puissance", value: Number(simResults.power), unit: "kW" };
     if (simResults.flow) return { label: "Débit", value: Number(simResults.flow), unit: "L/h" };
     return null;
   }, [simResults]);
@@ -128,18 +132,37 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
           )}
         </div>
 
-        {/* CHAMPS RÉSUMÉS */}
+        {/* CHAMPS RÉSUMÉS (Configurés via isSummary: true) */}
         {summaryFields.length > 0 && (
             <div className="grid grid-cols-2 gap-2">
                 {summaryFields.map((field: any) => (
                     <div key={field.id} className="flex flex-col bg-slate-50 p-2 rounded-lg border border-slate-100 min-w-0">
-                        <span className="text-[7px] font-bold text-slate-400 uppercase truncate">{field.label}</span>
+                        <span className="text-[7px] font-bold text-slate-400 uppercase truncate">{t(field.label, locale as any)}</span>
                         <span className="text-[10px] font-mono font-bold text-slate-700 truncate">
                             {props[field.id] ?? '-'} <span className="text-[8px] text-slate-400">{field.unit}</span>
                         </span>
                     </div>
                 ))}
             </div>
+        )}
+
+        {/* --- NOUVEAU : AFFICHAGE DES ACCESSOIRES (NESTING) --- */}
+        {accessories.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-50">
+             {accessories.map((acc: any, i: number) => (
+               <div 
+                key={i} 
+                className="flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded-md shadow-sm" 
+                title={`${acc.type}: ${acc.model || 'Standard'}`}
+               >
+                  <DynamicIcon 
+                    name={acc.type === 'PUMP' ? 'Zap' : acc.type === 'HEATER' ? 'Flame' : 'Activity'} 
+                    className="w-2.5 h-2.5 text-slate-400" 
+                  />
+                  <span className="text-[7px] font-black uppercase text-slate-500">{acc.type}</span>
+               </div>
+             ))}
+          </div>
         )}
 
         {/* JAUGE DE SIMULATION */}

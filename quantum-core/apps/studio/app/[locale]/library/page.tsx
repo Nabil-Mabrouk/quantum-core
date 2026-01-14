@@ -1,5 +1,4 @@
-import { db } from '@repo/database';
-import { getLibrary } from '../actions/library';
+import { getLibrary } from '@/app/actions/library';
 import { getDynamicSchemas } from '@/app/actions/configuration';
 import { getDomainConfig } from '@/lib/registry';
 import { SideNav } from '@/components/layout/shell/side-nav';
@@ -7,18 +6,24 @@ import { UniversalHeader } from '@/components/layout/shell/universal-header';
 import { LibraryManager } from '@/components/library/library-manager';
 import { LibrarySpecsView } from '@/components/library/views/library-specs-view';
 import { LibraryIOView } from '@/components/library/views/library-io-view';
-import { BookOpen, Database, ShieldCheck, Settings, ChevronRight } from 'lucide-react';
+import { BookOpen, Database, ShieldCheck, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { clsx } from 'clsx'; // <--- AJOUTE CETTE LIGNE
+import { clsx } from 'clsx';
+import { t, Locale } from '@/lib/i18n'; // Import du type Locale
 
 export default async function LibraryPage(props: { 
+  params: Promise<{ locale: string }>,
   searchParams: Promise<{ view?: string, projectId?: string }> 
 }) {
-  const { view, projectId } = await props.searchParams;
-  const currentView = view || 'master';
+  const { locale } = (await props.params) as { locale: Locale }; 
+  // Dans Next.js 15/16, searchParams est une Promise
+  const searchParams = await props.searchParams;
+  const currentView = searchParams.view || 'master';
+  const projectId = searchParams.projectId;
   
   const config = getDomainConfig();
   const domainId = config.id;
+  
 
   // Récupération des données techniques
   const allItems = await getLibrary(domainId);
@@ -32,19 +37,21 @@ export default async function LibraryPage(props: {
       <div className="flex-1 flex flex-col overflow-hidden">
         
         {/* 2. HEADER UNIFIÉ */}
-        <UniversalHeader />
+        <UniversalHeader projectId={projectId} />
 
         <div className="flex-1 flex overflow-hidden">
           
           {/* 3. SIDEBAR INTERNE (PROPRE À LA BIBLIOTHÈQUE) */}
           <aside className="w-64 border-r border-slate-200 bg-white hidden lg:flex flex-col shrink-0">
             <div className="p-8">
-              <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-8">Base de Connaissances</h2>
+              <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-8">
+                {locale === 'fr' ? 'Base de Connaissances' : 'Knowledge Base'}
+              </h2>
               <nav className="space-y-2">
                 <LibraryNavlink 
-                  href="/library?view=master" 
+                  href={`/${locale}/library?view=master`} // Utilisation du locale dynamique
                   icon={<BookOpen className="w-4 h-4" />} 
-                  label="Référentiel Master" 
+                  label={locale === 'fr' ? 'Référentiel Master' : 'Master Registry'} 
                   active={currentView === 'master'} 
                 />
                 <LibraryNavlink 
@@ -56,7 +63,7 @@ export default async function LibraryPage(props: {
                 <LibraryNavlink 
                   href="/library?view=specs" 
                   icon={<ShieldCheck className="w-4 h-4" />} 
-                  label="Modèles de Données" 
+                  label={locale === 'fr' ? 'Modèles de Données' : 'Data Models'} 
                   active={currentView === 'specs'} 
                 />
               </nav>
@@ -64,10 +71,13 @@ export default async function LibraryPage(props: {
             
             <div className="mt-auto p-8 border-t border-slate-100">
                 <div className="bg-slate-50 p-4 rounded-2xl">
-                    <p className="text-[9px] font-black uppercase text-slate-400 mb-2">Domaine Actif</p>
+                    <p className="text-[9px] font-black uppercase text-slate-400 mb-2">
+                        {locale === 'fr' ? 'Domaine Actif' : 'Active Domain'}
+                    </p>
                     <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                        <span className="text-xs font-bold text-slate-700">{config.name}</span>
+                        {/* CORRECTION : On utilise t() pour afficher l'objet I18nLabel */}
+                        <span className="text-xs font-bold text-slate-700">{t(config.name, locale)}</span>
                     </div>
                 </div>
             </div>
@@ -79,8 +89,12 @@ export default async function LibraryPage(props: {
               {currentView === 'master' && (
                 <div className="h-full flex flex-col">
                   <div className="px-10 pt-8 pb-4">
-                    <h1 className="text-3xl font-black text-slate-900 tracking-tight">Référentiel Master</h1>
-                    <p className="text-slate-500 text-sm italic">Gérez les composants chimiques et matériels standards du domaine.</p>
+                    <h1 className="text-3xl font-black text-slate-900 tracking-tight">
+                        {locale === 'fr' ? 'Référentiel Master' : 'Master Registry'}
+                    </h1>
+                    <p className="text-slate-500 text-sm italic">
+                        {locale === 'fr' ? 'Gérez les composants chimiques et matériels standards.' : 'Manage standard chemical and hardware components.'}
+                    </p>
                   </div>
                   <div className="flex-1 px-10 pb-10 overflow-hidden">
                     <div className="h-full bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">

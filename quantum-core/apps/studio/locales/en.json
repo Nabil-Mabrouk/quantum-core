@@ -1,0 +1,23 @@
+{
+  "ui": {
+    "save": "Save",
+    "simulate": "Simulate",
+    "process": "Process",
+    "utilities": "Utilities",
+    "accessories": "Accessories",
+    "loading": "Loading...",
+    "error": "Error",
+    "dashboard": "Projects",
+    "settings": "Settings",
+    "none": "None",
+    "add": "Add",
+    "delete": "Delete"
+  },
+  "scopes": {
+    "PROCESS": "Process Equipment",
+    "UTILITY": "Utility / Network"
+  },
+  "marketingPage": {
+    "title": "Build the future of water treatment"
+  }
+}

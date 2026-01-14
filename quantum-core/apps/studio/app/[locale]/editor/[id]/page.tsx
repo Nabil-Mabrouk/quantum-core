@@ -7,7 +7,7 @@ import { Workspace } from '@/components/layout/workspace';
 import { SideNav } from '@/components/layout/shell/side-nav';
 import { UniversalHeader } from '@/components/layout/shell/universal-header';
 
-import { loadGraph } from '../../actions/graph';
+import { loadGraph } from '@/app/actions/graph';
 import { getDomainConfig } from '@/lib/registry';
 
 export default async function EngineeringStudio(props: {

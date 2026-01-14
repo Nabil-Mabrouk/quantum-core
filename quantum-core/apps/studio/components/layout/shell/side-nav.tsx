@@ -10,10 +10,14 @@ import {
   Settings2,
   ArrowLeft,
   ShieldCheck,
-  LogOut
+  LogOut,
+  BookOpen // Icône pour la doc
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { signOut, useSession } from "next-auth/react";
+import { t } from '@/lib/i18n'; // Helper de traduction indispensable
+import { useParams } from 'next/navigation'; // 1. Import
+import { Locale } from '@/lib/i18n'; // 2. Import du type
 
 interface SideNavProps {
   projectId?: string;
@@ -22,17 +26,21 @@ interface SideNavProps {
 
 export function SideNav({ projectId, systemId }: SideNavProps) {
   const pathname = usePathname();
+  
+  const params = useParams(); // 3. Récupère les paramètres d'URL
+  const locale = (params.locale as Locale) || 'fr'; // 4. Dynamique !
+
   const { data: session } = useSession();
   
   // Vérification du rôle admin via la session NextAuth
   const isAdmin = session?.user?.role === 'ADMIN';
 
-  // Définition des items de navigation principale
+  // Définition des items avec labels multilingues
   const navItems = [
     { 
       key: 'dashboard',
       icon: Home, 
-      label: 'Tableau de Bord', 
+      label: { fr: 'Tableau de Bord', en: 'Dashboard' }, 
       href: '/dashboard', 
       active: pathname === '/dashboard',
       disabled: false,
@@ -41,25 +49,25 @@ export function SideNav({ projectId, systemId }: SideNavProps) {
     { 
       key: 'blueprint',
       icon: Network, 
-      label: 'Master Blueprint', 
+      label: { fr: 'Plan Directeur', en: 'Master Blueprint' }, 
       href: projectId ? `/project/${projectId}` : '#', 
       active: pathname.startsWith('/project'),
       disabled: !projectId,
-      disabledReason: "Ouvrez un projet d'abord"
+      disabledReason: { fr: "Ouvrez un projet d'abord", en: "Open a project first" }
     },
     { 
       key: 'editor',
       icon: LayoutDashboard, 
-      label: 'Conception Détail', 
+      label: { fr: 'Conception Détail', en: 'Engineering' }, 
       href: (projectId && systemId) ? `/editor/${projectId}?systemId=${systemId}` : '#', 
       active: pathname.startsWith('/editor'),
       disabled: !systemId,
-      disabledReason: "Sélectionnez un système"
+      disabledReason: { fr: "Sélectionnez un système", en: "Select a system" }
     },
     { 
       key: 'library',
       icon: FlaskConical, 
-      label: 'Bibliothèque', 
+      label: { fr: 'Bibliothèque', en: 'Library' }, 
       href: '/library', 
       active: pathname.startsWith('/library'),
       disabled: false,
@@ -102,12 +110,12 @@ export function SideNav({ projectId, systemId }: SideNavProps) {
             >
               <Icon className={clsx("w-5 h-5", item.disabled && "opacity-40")} />
               
-              {/* INDICATEUR ACTIF (Barre latérale bleue) */}
+              {/* INDICATEUR ACTIF */}
               {item.active && (
                 <div className="absolute -left-2 w-1.5 h-6 bg-blue-500 rounded-r-full shadow-[0_0_15px_rgba(59,130,246,0.6)]" />
               )}
 
-              {/* TOOLTIP FLOTTANT */}
+              {/* TOOLTIP FLOTTANT (Traductions appliquées ici) */}
               <div className="absolute left-14 invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-all z-[100] translate-x-2 group-hover:translate-x-0 pointer-events-none">
                  <div className={clsx(
                    "text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg shadow-2xl border flex items-center gap-2",
@@ -115,10 +123,10 @@ export function SideNav({ projectId, systemId }: SideNavProps) {
                     ? "bg-slate-800 text-slate-500 border-slate-700" 
                     : "bg-white text-slate-900 border-slate-200"
                  )}>
-                    {item.label}
+                    {t(item.label, locale)}
                     {item.disabled && (
                       <span className="text-[8px] bg-red-900/20 px-1.5 py-0.5 rounded text-red-400 normal-case tracking-normal border border-red-900/30">
-                        {item.disabledReason}
+                        {t(item.disabledReason, locale)}
                       </span>
                     )}
                  </div>
@@ -141,12 +149,10 @@ export function SideNav({ projectId, systemId }: SideNavProps) {
             >
               <ShieldCheck className="w-5 h-5" />
               
-              {/* Indicateur actif Admin */}
               {pathname.startsWith('/admin') && (
                 <div className="absolute -left-2 w-1.5 h-6 bg-amber-500 rounded-r-full shadow-[0_0_15px_rgba(245,158,11,0.6)]" />
               )}
 
-              {/* Tooltip Admin */}
               <div className="absolute left-14 invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-all z-[100] translate-x-2 group-hover:translate-x-0 pointer-events-none">
                 <div className="bg-amber-600 text-white text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg shadow-2xl whitespace-nowrap">
                     Console Administration
@@ -159,15 +165,20 @@ export function SideNav({ projectId, systemId }: SideNavProps) {
 
       {/* 3. ACTIONS DE BAS DE PAGE */}
       <div className="mt-auto flex flex-col gap-4 shrink-0 pb-2">
-         {/* Préférences Utilisateur */}
-         <button className="w-12 h-12 flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/5 rounded-2xl transition-all group relative">
-            <Settings2 className="w-5 h-5" />
+         
+         {/* LIEN DOCUMENTATION (Nextra) */}
+         <Link 
+           href="http://localhost:3001" 
+           target="_blank"
+           className="w-12 h-12 flex items-center justify-center text-slate-500 hover:text-blue-400 transition-all group relative"
+         >
+            <BookOpen className="w-5 h-5" />
             <div className="absolute left-14 invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-all z-[100] translate-x-2 group-hover:translate-x-0 pointer-events-none">
                 <div className="bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg shadow-2xl border border-slate-700">
-                    Préférences
+                    Documentation
                 </div>
             </div>
-         </button>
+         </Link>
 
          {/* Déconnexion */}
          <button 

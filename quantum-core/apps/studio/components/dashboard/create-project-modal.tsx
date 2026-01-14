@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation'; // <--- IMPORT AJOUTÉ
+import { useRouter } from 'next/navigation';
 import { 
   X, Plus, Rocket, Folder, 
   FlaskConical, Zap, Droplets, 
@@ -9,33 +9,34 @@ import {
 } from 'lucide-react';
 import { createProjectAction } from '@/app/actions/project';
 import { getAvailableDomains } from '@/lib/registry';
+import { t } from '@/lib/i18n'; // <--- Import du helper de traduction
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
 
 export function CreateProjectModal() {
-  const router = useRouter(); // <--- INITIALISATION DU ROUTER
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [selectedDomain, setSelectedDomain] = useState('SURFACE_TREATMENT');
   
+  const locale = 'fr'; // À récupérer dynamiquement via un hook de langue si disponible
   const domains = getAvailableDomains();
 
   const handleSubmit = async (formData: FormData) => {
     setIsPending(true);
     try {
+      // On injecte le domaine sélectionné dans le formData
       formData.append('domain', selectedDomain);
       
-      // On récupère le résultat de l'action
       const result = await createProjectAction(formData);
       
       if (result?.id) {
         toast.success("Étude initialisée avec succès");
         setIsOpen(false);
-        // On redirige côté client
+        // Redirection vers l'éditeur du projet
         router.push(`/editor/${result.id}`);
       }
     } catch (error) {
-      // Maintenant, on n'attrape que les vraies erreurs (ex: DB crash, Auth)
       toast.error("Erreur lors de la création du projet");
       console.error(error);
     } finally {
@@ -59,7 +60,7 @@ export function CreateProjectModal() {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-md animate-in fade-in duration-300">
       <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden border border-slate-200 flex flex-col md:flex-row h-[600px] animate-in zoom-in-95 duration-300">
         
-        {/* --- COLONNE GAUCHE --- */}
+        {/* --- COLONNE GAUCHE : ILLUSTRATION & CONTEXTE --- */}
         <div className="w-full md:w-80 bg-slate-900 p-10 text-white flex flex-col justify-between relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none bg-[radial-gradient(#3b82f6_1px,transparent_1px)] [background-size:20px_20px]" />
             <div className="relative z-10">
@@ -83,9 +84,11 @@ export function CreateProjectModal() {
             </div>
         </div>
 
-        {/* --- COLONNE DROITE --- */}
+        {/* --- COLONNE DROITE : FORMULAIRE --- */}
         <form action={handleSubmit} className="flex-1 flex flex-col bg-white">
             <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-10">
+                
+                {/* 01. NOM DU PROJET */}
                 <div className="space-y-4">
                     <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 flex items-center gap-2">
                         <Folder className="w-3 h-3" /> 01. Identité de l'étude
@@ -99,6 +102,7 @@ export function CreateProjectModal() {
                     />
                 </div>
 
+                {/* 02. SÉLECTION DU DOMAINE */}
                 <div className="space-y-4">
                     <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 flex items-center gap-2">
                         <Zap className="w-3 h-3" /> 02. Domaine d'expertise
@@ -123,9 +127,10 @@ export function CreateProjectModal() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className={clsx("font-black text-sm uppercase tracking-tight", selectedDomain === d.id ? "text-blue-900" : "text-slate-600")}>
-                                        {d.name}
+                                        {/* TRADUCTION DU NOM DU DOMAINE ICI */}
+                                        {t(d.name, locale)}
                                     </p>
-                                    <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mt-0.5">Moteur v3.0</p>
+                                    <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mt-0.5">Quantum Engine v3.3</p>
                                 </div>
                             </div>
                         ))}
@@ -133,6 +138,7 @@ export function CreateProjectModal() {
                 </div>
             </div>
 
+            {/* ACTIONS DU BAS */}
             <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
                 <button 
                     type="button"

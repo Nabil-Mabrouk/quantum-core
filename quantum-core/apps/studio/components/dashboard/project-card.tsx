@@ -5,7 +5,9 @@ import { Trash2, Edit3, Folder, Check, X } from 'lucide-react';
 import { deleteProjectAction, renameProjectAction } from '@/app/actions/project';
 import Link from 'next/link';
 import { toast } from "sonner";
-import { useConfirm } from "@/components/providers/confirm-provider"; // Assurez-vous que ce chemin est correct
+import { useConfirm } from "@/components/providers/confirm-provider";
+import { getDomainConfig } from '@/lib/registry'; // Pour récupérer le nom du domaine
+import { t } from '@/lib/i18n'; // Pour la traduction
 
 export function ProjectCard({ project }: { project: any }) {
   const { confirm } = useConfirm();
@@ -14,14 +16,20 @@ export function ProjectCard({ project }: { project: any }) {
   const [isRenaming, setIsRenaming] = useState(false);
   const [tempName, setTempName] = useState(project.name);
 
+  // i18n context
+  const locale = 'fr'; 
+
+  // Récupération de la configuration du domaine pour obtenir son label traduit
+  const domainConfig = getDomainConfig(project.domain);
+
   // --- ACTION : SUPPRESSION ---
   const handleDelete = async (e: React.MouseEvent) => {
-    e.preventDefault(); // Empêche d'entrer dans le projet
+    e.preventDefault(); 
     e.stopPropagation();
 
     const isConfirmed = await confirm({
-      title: "Supprimer le projet ?",
-      description: `Êtes-vous sûr de vouloir supprimer "${project.name}" ? Cette action effacera tous les systèmes et historiques associés.`,
+      title: "Supprimer l'étude ?",
+      description: `Êtes-vous sûr de vouloir supprimer "${project.name}" ? Cette action effacera tous les systèmes et historiques associés de manière irréversible.`,
       confirmText: "Supprimer définitivement",
       variant: "danger"
     });
@@ -29,18 +37,10 @@ export function ProjectCard({ project }: { project: any }) {
     if (isConfirmed) {
       toast.promise(deleteProjectAction(project.id), {
         loading: 'Suppression en cours...',
-        success: 'Projet supprimé',
+        success: 'Étude supprimée avec succès',
         error: 'Erreur lors de la suppression'
       });
     }
-  };
-
-  // --- ACTION : DÉMARRER LE RENOMMAGE ---
-  const startRenaming = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsRenaming(true);
-    // Petit hack pour focus l'input au prochain render (si besoin)
   };
 
   // --- ACTION : SAUVEGARDER LE NOM ---
@@ -54,10 +54,10 @@ export function ProjectCard({ project }: { project: any }) {
     }
 
     toast.promise(renameProjectAction(project.id, tempName), {
-      loading: 'Renommage...',
+      loading: 'Mise à jour du nom...',
       success: () => {
         setIsRenaming(false);
-        return 'Projet renommé';
+        return 'Étude renommée';
       },
       error: 'Erreur lors du renommage'
     });
@@ -74,9 +74,12 @@ export function ProjectCard({ project }: { project: any }) {
   return (
     <div className="group bg-white border border-slate-200 p-6 rounded-[2.5rem] hover:border-blue-500 hover:shadow-2xl hover:shadow-blue-500/10 transition-all relative overflow-hidden flex flex-col h-full">
       
-      {/* On utilise un div clickable ou un Link selon l'état */}
-      {/* Si on renomme, on désactive le lien global pour éviter les clics accidentels */}
-      <Link href={isRenaming ? '#' : `/project/${project.id}`} className={`block h-full ${isRenaming ? 'cursor-default' : ''}`}>
+      {/* Si on renomme, on désactive le lien pour éviter les navigations accidentelles */}
+      <Link 
+        href={isRenaming ? '#' : `/project/${project.id}`} 
+        className={`block h-full ${isRenaming ? 'cursor-default' : ''}`}
+        onClick={(e) => isRenaming && e.preventDefault()}
+      >
         
         {/* HEADER CARTE */}
         <div className="flex justify-between items-start mb-6">
@@ -84,20 +87,24 @@ export function ProjectCard({ project }: { project: any }) {
             <Folder className="w-6 h-6" />
           </div>
           
-          {/* BOUTONS ACTIONS (Cachés pendant le renommage) */}
+          {/* BOUTONS ACTIONS */}
           {!isRenaming && (
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button 
-                onClick={startRenaming} 
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsRenaming(true);
+                }} 
                 className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-900 transition-colors"
-                title="Renommer"
+                title="Renommer l'étude"
               >
                 <Edit3 className="w-4 h-4" />
               </button>
               <button 
                 onClick={handleDelete} 
                 className="p-2 hover:bg-red-50 rounded-full text-slate-400 hover:text-red-600 transition-colors"
-                title="Supprimer"
+                title="Supprimer l'étude"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -112,8 +119,8 @@ export function ProjectCard({ project }: { project: any }) {
               <input 
                 value={tempName}
                 onChange={(e) => setTempName(e.target.value)}
-                onClick={(e) => e.preventDefault()} // Empêche le Link de s'activer
-                className="w-full bg-slate-50 border border-blue-300 rounded-lg px-2 py-1 text-xl font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                onKeyDown={(e) => e.key === 'Enter' && saveRename(e as any)}
+                className="w-full bg-slate-50 border border-blue-300 rounded-lg px-2 py-1 text-xl font-black text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10"
                 autoFocus
               />
               <button onClick={saveRename} className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200">
@@ -130,8 +137,9 @@ export function ProjectCard({ project }: { project: any }) {
           )}
         </div>
 
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-          {project.domain === 'WATER' ? 'Traitement Eaux' : 'Énergie'}
+        {/* AFFICHAGE DU DOMAINE (TRADUIT) */}
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-auto">
+          {domainConfig ? t(domainConfig.name, locale) : project.domain}
         </p>
 
       </Link>

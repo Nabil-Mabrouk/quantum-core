@@ -1,62 +1,76 @@
 'use client';
 
-import { useCanvasStore, AppNode } from '@/store/canvas-store';
+import { useCanvasStore } from '@/store/canvas-store';
+import { Network, Unplug, ChevronDown } from 'lucide-react';
+import { clsx } from 'clsx';
 import { useMemo } from 'react';
-import { Link } from 'lucide-react';
 
 interface NodeSelectorProps {
-  value: string | null;
+  value?: string | null;
   onChange: (value: string | null) => void;
-  filter?: string[]; // Array of node types to include, e.g., ['TANK', 'DRAIN']
+  filter?: string[]; // Liste des types autorisés (ex: ['DRAIN', 'STORAGE_TANK'])
 }
 
 export function NodeSelector({ value, onChange, filter }: NodeSelectorProps) {
-  // Get all nodes and the ID of the node currently being edited
-  const allNodes = useCanvasStore(state => state.nodes);
-  const selectedNodeId = useCanvasStore(state => state.selectedNodeId);
+  const nodes = useCanvasStore((state) => state.nodes);
 
-  // Memoize the filtered and grouped list of nodes
-  const groupedNodes = useMemo(() => {
-    // Filter nodes based on the provided filter and exclude the node being edited
-    const eligibleNodes = allNodes.filter(node => 
-      node.id !== selectedNodeId && 
-      (!filter || filter.length === 0 || filter.includes(node.data.type))
-    );
+  // 1. Filtrer les noeuds disponibles selon les critères du manifeste
+  const availableNodes = useMemo(() => {
+    return nodes.filter((node) => {
+      // On ne peut pas se connecter à soi-même (logique)
+      // Note: On pourrait passer l'ID du noeud courant pour filtrer plus précisément
+      
+      if (!filter || filter.length === 0) return true;
+      return filter.includes(node.data.type);
+    });
+  }, [nodes, filter]);
 
-    // Group nodes by their role for better UX in the dropdown
-    return eligibleNodes.reduce((acc, node) => {
-      const role = node.data.role || 'PROCESS';
-      if (!acc[role]) {
-        acc[role] = [];
-      }
-      acc[role].push(node);
-      return acc;
-    }, {} as Record<string, AppNode[]>);
-
-  }, [allNodes, selectedNodeId, filter]);
-
-  const hasNodes = Object.keys(groupedNodes).length > 0;
+  // 2. Trouver le label du noeud actuellement sélectionné
+  const selectedNodeLabel = useMemo(() => {
+    if (!value) return null;
+    return nodes.find((n) => n.id === value)?.data.label;
+  }, [value, nodes]);
 
   return (
-    <div className="relative w-full">
-      <select 
-        value={value || ''}
+    <div className="relative group w-full">
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none">
+        {value ? <Network className="w-3.5 h-3.5" /> : <Unplug className="w-3.5 h-3.5" />}
+      </div>
+
+      <select
+        value={value || ""}
         onChange={(e) => onChange(e.target.value || null)}
-        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer appearance-none"
-        disabled={!hasNodes}
+        className={clsx(
+          "w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none transition-all appearance-none cursor-pointer",
+          "hover:border-blue-300 hover:bg-white focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500",
+          value ? "text-blue-700 border-blue-100" : "text-slate-500 italic"
+        )}
       >
-        <option value="">{hasNodes ? '--- Sélectionner une cible ---' : 'Aucune cible disponible'}</option>
-        {Object.entries(groupedNodes).map(([role, nodes]) => (
-          <optgroup key={role} label={role}>
-            {nodes.map(node => (
+        <option value="">-- Aucun raccordement --</option>
+        
+        {availableNodes.length > 0 ? (
+          <optgroup label="Équipements disponibles">
+            {availableNodes.map((node) => (
               <option key={node.id} value={node.id}>
-                {node.data.label}
+                {node.data.label} ({node.data.type})
               </option>
             ))}
           </optgroup>
-        ))}
+        ) : (
+          <option disabled>Aucun équipement compatible trouvé</option>
+        )}
       </select>
-      <Link className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none group-hover:text-slate-500 transition-colors">
+        <ChevronDown className="w-3.5 h-3.5" />
+      </div>
+
+      {/* Petit indicateur visuel de l'ID pour le debug ingénieur */}
+      {value && (
+        <div className="mt-1.5 flex items-center gap-1 px-2 py-0.5 bg-blue-50/50 rounded-md border border-blue-100/50 w-fit">
+            <span className="text-[7px] font-mono text-blue-400 uppercase tracking-tighter">UID: {value.slice(0, 8)}...</span>
+        </div>
+      )}
     </div>
   );
 }

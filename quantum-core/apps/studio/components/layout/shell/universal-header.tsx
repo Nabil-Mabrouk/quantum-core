@@ -14,9 +14,13 @@ import { runProjectSummaryAction } from '@/app/actions/simulation';
 import { saveGraph } from '@/app/actions/graph';
 import { useState, useRef } from 'react';
 import { getDomainConfig } from '@/lib/registry';
+import { t, getDictionary } from '@/lib/i18n'; 
 import { toast } from "sonner";
 import { ProjectSettingsModal } from '../project-settings-modal';
 import { SimulationConsole } from '@/components/ui/simulation-console';
+import { useParams } from 'next/navigation'; // 1. Import
+import { Locale } from '@/lib/i18n'; // 2. Import du type
+import { LanguageSwitcher } from './language-switcher'; // Import
 
 interface UniversalHeaderProps {
   projectName?: string;
@@ -30,10 +34,13 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
   const pathname = usePathname();
   const searchParams = useSearchParams();
   
-  // Détection de la vue active via l'URL (pour le niveau projet)
-  const currentView = searchParams.get('view') || 'map'; 
+  // Contexte i18n
+  const params = useParams(); // 3. Récupère les paramètres d'URL
+  const locale = (params.locale as Locale) || 'fr'; // 4. Dynamique !
+  const dict = getDictionary(locale);
 
-  // Détection du mode Library
+  // Détection de la vue active
+  const currentView = searchParams.get('view') || 'map'; 
   const isLibrary = pathname.includes('/library');
 
   const store = useCanvasStore();
@@ -63,7 +70,7 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
   
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Contextes
+  // Contextes de navigation
   const isProjectLevel = projectId && !currentSystemId;
   const isSystemLevel = !!currentSystemId;
 
@@ -71,7 +78,7 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
 
   const handleSave = async () => {
     if (!currentSystemId) {
-      toast.error("Aucun système actif sélectionné.");
+      toast.error("Aucun système sélectionné.");
       return;
     }
     
@@ -86,12 +93,12 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
     try {
       const result = await saveGraph(currentSystemId, cleanNodes, edges, sequences);
       if (result.success) {
-        toast.success("Modifications enregistrées");
+        toast.success(dict.ui.save);
       } else {
         toast.error("Erreur", { description: result.error });
       }
     } catch (e) {
-      toast.error("Erreur serveur inattendue");
+      toast.error("Erreur serveur");
     } finally {
       setIsSaving(false);
     }
@@ -101,23 +108,26 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
     if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
-        setLogs(prev => [...prev, { message: "🛑 Arrêt manuel de la simulation.", timestamp: new Date().toLocaleTimeString() }]);
+        setLogs(prev => [...prev, { 
+            message: "🛑 " + (locale === 'fr' ? "Arrêt manuel par l'utilisateur." : "Manual stop by user."), 
+            timestamp: new Date().toLocaleTimeString() 
+        }]);
         setSimStatus('error');
         setIsSimulating(false);
-        toast.info("Calcul annulé");
+        toast.info("Simulation annulée");
     }
   };
 
   const handleSimulateStreaming = async () => {
     if (!config?.id || !currentSystemId) {
-      toast.warning("Données système incomplètes.");
+      toast.warning("Données incomplètes");
       return;
     }
 
     setIsSimulating(true);
     setSimStatus('running');
     setShowConsole(true);
-    setLogs([{ message: "🚀 Initialisation du moteur Quantum...", timestamp: new Date().toLocaleTimeString() }]);
+    setLogs([{ message: "🚀 Initialisation Quantum Engine...", timestamp: new Date().toLocaleTimeString() }]);
     setProgress(5);
 
     const controller = new AbortController();
@@ -128,7 +138,7 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                projectId: projectId,
+                projectId,
                 domain: config.id,
                 nodes: nodes.map(n => ({ id: n.id, type: n.type, properties: n.data.properties })),
                 edges: edges.map(e => ({ source: e.source, target: e.target, properties: e.data })),
@@ -137,7 +147,7 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
             signal: controller.signal,
         });
 
-        if (!response.body) throw new Error("Réponse vide du moteur.");
+        if (!response.body) throw new Error("No response body");
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -155,46 +165,44 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
                 if (!line.trim()) continue;
                 try {
                     const msg = JSON.parse(line);
-                    
                     if (msg.type === 'log') {
                         setLogs(prev => [...prev, { message: msg.message, timestamp: new Date().toLocaleTimeString() }]);
                         if (msg.progress) setProgress(msg.progress);
-                    }
-                    else if (msg.type === 'result') {
+                    } else if (msg.type === 'result') {
                         const res = msg.data;
-                        const details = res.node_details;
-                        
-                        Object.keys(details).forEach(id => store.updateNodeProperties(id, { simulationResults: details[id] }));
+                        Object.keys(res.node_details).forEach(id => 
+                            store.updateNodeProperties(id, { simulationResults: res.node_details[id] })
+                        );
                         store.setSummaryData(res);
-                        
                         setSimStatus('success');
-                        toast.success("Simulation réussie");
-                    }
-                    else if (msg.type === 'error') {
+                        toast.success("Simulation terminée");
+                    } else if (msg.type === 'error') {
                         throw new Error(msg.message);
                     }
-                } catch (e) {
-                    // Ignorer les fragments JSON
-                }
+                } catch (e) { /* Ignore partial JSON */ }
             }
         }
     } catch (error: any) {
         if (error.name === 'AbortError') return;
-        setLogs(prev => [...prev, { message: `❌ ERREUR: ${error.message}`, timestamp: new Date().toLocaleTimeString() }]);
+        setLogs(prev => [...prev, { message: `❌ ERROR: ${error.message}`, timestamp: new Date().toLocaleTimeString() }]);
         setSimStatus('error');
-        toast.error("Erreur pendant le calcul");
+        toast.error("Erreur Moteur");
     } finally {
         setIsSimulating(false);
         abortControllerRef.current = null;
     }
   };
 
+  // RÉIMPLÉMENTATION DE LA FONCTION MANQUANTE
   const handleGenerateOffer = async () => {
     setIsGenerating(true);
+    // Simulation d'un délai pour l'IA
     setTimeout(() => {
-        toast.info("Module IA en préparation", { description: "L'analyse prédictive arrive bientôt." });
+        toast.info("Module IA", { 
+            description: "Génération du rapport technico-économique en cours de développement." 
+        });
         setIsGenerating(false);
-    }, 1200);
+    }, 1500);
   };
 
   const handleProjectSummary = async () => {
@@ -205,9 +213,9 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
         if (result.success) {
             setSummaryData(result.data);
             setViewMode('SUMMARY');
-            toast.success("Bilan global consolidé");
+            toast.success("Bilan global généré");
         } else {
-            toast.error("Erreur Bilan", { description: result.error });
+            toast.error("Erreur", { description: result.error });
         }
     } catch(e) {
         toast.error("Erreur de connexion");
@@ -218,9 +226,9 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
 
   return (
     <>
-      <header className="h-16 border-b border-slate-200 bg-white grid grid-cols-[1fr_auto_1fr] items-center px-6 shrink-0 z-40 shadow-sm relative transition-all">
+      <header className="h-16 border-b border-slate-200 bg-white grid grid-cols-[1fr_auto_1fr] items-center px-6 shrink-0 z-40 shadow-sm relative">
         
-        {/* --- GAUCHE : NAVIGATION & BREADCRUMBS --- */}
+        {/* --- GAUCHE : BREADCRUMBS --- */}
         <div className="flex items-center justify-start min-w-0">
           <Link href="/dashboard" className="flex items-center gap-3 mr-4 group">
              <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white font-bold shadow-lg group-hover:scale-105 transition-transform">QC</div>
@@ -228,7 +236,7 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
 
           <nav className="flex items-center gap-2 overflow-hidden text-sm">
             <Link href="/dashboard" className="text-slate-400 hover:text-slate-600 font-bold text-xs uppercase tracking-wider transition-colors truncate">
-                Projets
+                {dict.ui.dashboard || "Études"}
             </Link>
             
             {projectName && (
@@ -237,7 +245,7 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
                 <Link 
                   href={`/project/${projectId}`} 
                   className={clsx(
-                    "font-black tracking-tight transition-colors truncate max-w-[200px]", 
+                    "font-black tracking-tight transition-colors truncate max-w-[150px] lg:max-w-[250px]", 
                     isProjectLevel ? "text-blue-600" : "text-slate-700 hover:text-blue-600"
                   )}
                 >
@@ -282,19 +290,19 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
                 </button>
                 <div className="w-px h-4 bg-slate-300/50 mx-1" />
                 <button onClick={() => setViewMode('SUMMARY')} className={clsx("px-4 h-full rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest", viewMode === 'SUMMARY' ? "bg-white text-purple-600 shadow-sm border border-purple-100/50" : "text-slate-400 hover:text-slate-600")}>
-                  <Factory className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Résultats</span>
+                  <Factory className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Bilan</span>
                 </button>
               </>
             )}
 
             {isLibrary && (
                 <div className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    Mode Référentiel
+                    {t(config.libraries[0]?.label, locale) || "Référentiel"}
                 </div>
             )}
           </div>
 
-          {/* SÉLECTEUR DE SOUS-MODE (Uniquement en Synoptique) */}
+          {/* SÉLECTEUR DE SOUS-MODE SYNOPTIQUE */}
           {isSystemLevel && viewMode === 'SYNOPTIC' && (
               <div className="bg-blue-50 p-1 rounded-xl border border-blue-100 flex items-center gap-1 h-10 animate-in fade-in slide-in-from-left-4">
                   <button 
@@ -322,20 +330,16 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
         {/* --- DROITE : ACTIONS --- */}
         <div className="flex items-center justify-end gap-2">
           {!isSystemLevel && !isLibrary && <div className="h-9 w-20" />}
-
+          <LanguageSwitcher /> 
           {isSystemLevel && (
             <>
-              <button 
-                onClick={() => setIsSettingsOpen(true)} 
-                className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors" 
-                title="Paramètres"
-              >
+              <button onClick={() => setIsSettingsOpen(true)} className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors" title={dict.ui.settings}>
                   <Settings className="w-4 h-4" />
               </button>
 
               <div className="h-6 w-px bg-slate-200 mx-1" />
 
-              <button onClick={handleGenerateOffer} disabled={isGenerating || nodes.length === 0} className="hidden lg:flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-purple-600 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 disabled:opacity-30 transition-all">
+              <button onClick={handleGenerateOffer} disabled={isGenerating} className="hidden lg:flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-purple-600 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 disabled:opacity-30 transition-all">
                   {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} IA
               </button>
 
@@ -345,12 +349,12 @@ export function UniversalHeader({ projectName, projectId, systems, currentSystem
                   className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition-all disabled:opacity-50"
               >
                   {isSimulating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-                  <span className="hidden xl:inline">Simuler</span>
+                  <span className="hidden xl:inline">{dict.ui.simulate}</span>
               </button>
 
-              <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-white bg-slate-900 rounded-xl hover:bg-black transition-all shadow-lg shadow-slate-200 disabled:opacity-50">
+              <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-white bg-slate-900 rounded-xl hover:bg-black transition-all shadow-lg disabled:opacity-50">
                   {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  <span className="hidden xl:inline">Sauvegarder</span>
+                  <span className="hidden xl:inline">{dict.ui.save}</span>
               </button>
             </>
           )}

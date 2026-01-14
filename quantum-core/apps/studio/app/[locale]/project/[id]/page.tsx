@@ -1,35 +1,51 @@
+// apps/studio/app/[locale]/project/[id]/page.tsx
 import { db } from '@repo/database';
-import { getProjectTopology } from '@/app/actions/stream';
+import { getProjectTopology } from '@/app/actions/stream'; // Vérifiez que le chemin inclut [locale] si vous avez déplacé les actions
 import { BlueprintFlow } from '@/components/canvas/blueprint/blueprint-flow';
 import { SideNav } from '@/components/layout/shell/side-nav';
 import { UniversalHeader } from '@/components/layout/shell/universal-header';
-// NOUVEAU : Import du viewer générique
 import { GenericReportViewer } from '@/components/layout/generic-report-viewer';
 import { auth } from "@/auth";
-export default async function ProjectBlueprintPage(props: { 
-  params: Promise<{ id: string }>,
-  searchParams: Promise<{ view?: string }> 
-}) {
-  const { id } = await props.params;
-  const session = await auth();
+import { getDictionary, Locale } from '@/lib/i18n';
 
-  const { view } = await props.searchParams;
+export default async function ProjectBlueprintPage(props: { 
+  params: Promise<{ id: string; locale: string }>; // Correction : ajout de locale
+  searchParams: Promise<{ view?: string }>; 
+}) {
+  // 1. Extraction asynchrone des paramètres
+  const { id, locale } = await props.params;
+  const searchParams = await props.searchParams;
+  const view = searchParams?.view; // Utilisation sécurisée
+  
+  const dict = getDictionary(locale as Locale);
+  const session = await auth();
   const currentView = view || 'map'; 
 
-  // 1. Fetch project details
-  const project = await db.project.findUniqueOrThrow({
-    where: { id,userId: session?.user?.id,},
+  // 2. Récupération sécurisée du projet (findUnique pour gérer l'erreur nous-même)
+  const project = await db.project.findUnique({
+    where: { 
+      id,
+      userId: session?.user?.id, // Sécurité : propriétaire uniquement
+    },
     include: { systems: true, streams: true }
   });
 
   if (!project) {
-    // Si le projet n'existe pas OU ne m'appartient pas -> 404 (pour ne pas confirmer l'existence de l'ID)
-    return <div>Projet introuvable ou accès refusé.</div>;
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center p-8 bg-white rounded-3xl shadow-xl border border-slate-200">
+          <p className="text-slate-900 font-black text-xl">
+            {locale === 'fr' ? "Projet introuvable ou accès refusé." : "Project not found or access denied."}
+          </p>
+        </div>
+      </div>
+    );
   }
-  // 2. Fetch topology
+
+  // 3. Fetch topology
   const { systems, streams } = await getProjectTopology(id);
 
-  // 3. Prepare Nodes (Systems)
+  // 4. Prepare Nodes (Systems)
   const initialNodes = systems.map((sys) => ({
     id: sys.id,
     type: 'systemNode',
@@ -44,7 +60,7 @@ export default async function ProjectBlueprintPage(props: {
     }
   }));
 
-  // 4. Prepare Edges (Streams)
+  // 5. Prepare Edges (Streams)
   const initialEdges = streams.map(stream => {
     const sourceSys = systems.find(s => s.nodes.some(n => n.outputStreamId === stream.id));
     const targetSys = systems.find(s => s.nodes.some(n => n.inputStreamId === stream.id));
@@ -61,10 +77,12 @@ export default async function ProjectBlueprintPage(props: {
       };
     }
     return null;
-  }).filter(Boolean);
+  }).filter((e): e is NonNullable<typeof e> => e !== null); // Type-guard pour TypeScript
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-900">
+      {/* On passe le locale à la SideNav si elle en a besoin, 
+          sinon elle utilisera useParams() côté client */}
       <SideNav projectId={id} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -77,12 +95,10 @@ export default async function ProjectBlueprintPage(props: {
 
         <main className="flex-1 relative bg-slate-50 overflow-hidden">
            {currentView === 'summary' ? (
-              // VUE BILAN : Rendu Générique via le Wrapper Client
               <div className="h-full overflow-y-auto custom-scrollbar">
                  <GenericReportViewer domain={project.domain} /> 
               </div>
            ) : (
-              // VUE BLUEPRINT (CARTE)
               <BlueprintFlow 
                 projectId={id} 
                 initialNodes={initialNodes} 

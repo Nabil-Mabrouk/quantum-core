@@ -1,0 +1,23 @@
+{
+  "ui": {
+    "save": "Sauvegarder",
+    "simulate": "Simuler",
+    "process": "Procédé",
+    "utilities": "Utilités",
+    "accessories": "Accessoires",
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "dashboard": "Études",
+    "settings": "Paramètres",
+    "none": "Aucun",
+    "add": "Ajouter",
+    "delete": "Supprimer"
+  },
+  "scopes": {
+    "PROCESS": "Équipement Process",
+    "UTILITY": "Réseau / Utilité"
+  },
+  "marketingPage": {
+    "title": "Bâtir le futur du traitement de l'eau"
+  }
+}

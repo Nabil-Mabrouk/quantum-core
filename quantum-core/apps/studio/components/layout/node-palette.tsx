@@ -5,6 +5,9 @@ import { Plus, ChevronDown } from 'lucide-react';
 import { DynamicIcon } from '@/components/ui/dynamic-icon';
 import { useMemo } from 'react';
 import { ResizablePanel } from '@/components/ui/resizable-panel';
+import { t } from '@/lib/i18n'; // <--- Import indispensable pour l'i18n
+import { useParams } from 'next/navigation'; // 1. Import
+import { Locale } from '@/lib/i18n'; // 2. Import du type
 
 interface NodePaletteProps {
   config: any;
@@ -13,17 +16,25 @@ interface NodePaletteProps {
 export function NodePalette({ config }: NodePaletteProps) {
   const addNode = useCanvasStore((state) => state.addNode);
   const viewMode = useCanvasStore((state) => state.viewMode);
+  
+  // À l'avenir, cette valeur viendra d'un hook useLocale()
+  const params = useParams(); // 3. Récupère les paramètres d'URL
+  const locale = (params.locale as Locale) || 'fr'; // 4. Dynamique !
 
+  // Groupement des nœuds par catégorie traduite
   const groupedNodes = useMemo(() => {
     const groups: Record<string, any[]> = {};
     const nodes = Object.values(config.nodeTypes || {});
+    
     nodes.forEach((node: any) => {
-      const cat = node.category || "Autres";
+      // On traduit la catégorie avant de s'en servir comme clé de groupe
+      const cat = t(node.category, locale) || "Autres";
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(node);
     });
+    
     return groups;
-  }, [config]);
+  }, [config, locale]);
 
   if (viewMode === 'SUMMARY') return null;
 
@@ -32,7 +43,8 @@ export function NodePalette({ config }: NodePaletteProps) {
       <div className="flex flex-col h-full bg-white">
         <div className="p-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">
-            Équipements {config.name}
+            {/* Traduction du nom du domaine (ex: Traitement de Surface) */}
+            Équipements {t(config.name, locale)}
           </h2>
         </div>
         
@@ -40,7 +52,9 @@ export function NodePalette({ config }: NodePaletteProps) {
           {Object.entries(groupedNodes).map(([category, nodes]) => (
             <div key={category} className="space-y-2">
               <h3 className="text-[10px] font-black uppercase text-slate-400 pl-1 flex items-center gap-1 truncate">
-                  <ChevronDown className="w-3 h-3 shrink-0" /> {category}
+                  <ChevronDown className="w-3 h-3 shrink-0" /> 
+                  {/* La catégorie est déjà traduite via le useMemo */}
+                  {category}
               </h3>
               
               <div className="grid gap-2">
@@ -54,14 +68,16 @@ export function NodePalette({ config }: NodePaletteProps) {
                         <DynamicIcon name={node.iconName} className="w-4 h-4" />
                       </div>
 
-                      {/* CORRECTION OVERFLOW : min-w-0 et truncate */}
+                      {/* Flex-1 et min-w-0 pour permettre au truncate de fonctionner */}
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold text-slate-700 truncate group-hover:text-blue-700">
-                            {node.label}
+                            {/* Traduction du label (ex: Bain de Traitement) */}
+                            {t(node.label, locale)}
                         </p>
                         {node.description && (
                           <p className="text-[9px] text-slate-400 truncate italic">
-                            {node.description}
+                            {/* Traduction de la description */}
+                            {t(node.description, locale)}
                           </p>
                         )}
                       </div>
@@ -76,7 +92,7 @@ export function NodePalette({ config }: NodePaletteProps) {
         
         <div className="p-4 border-t border-slate-100 bg-slate-50/30 text-center shrink-0">
             <p className="text-[8px] text-slate-300 font-bold uppercase tracking-tighter">
-              v2.2 • {config.id}
+              v3.3 • {config.id}
             </p>
         </div>
       </div>

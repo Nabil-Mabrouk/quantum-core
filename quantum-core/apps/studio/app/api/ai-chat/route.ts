@@ -1,62 +1,70 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@repo/database'; // Pour récupérer le projet/librairie si besoin
-import { auth } from '@/auth'; // Pour l'utilisateur
-// import OpenAI from 'openai'; // Ou tout autre SDK de LLM
+import { NextRequest } from 'next/server';
+import { db } from '@repo/database';
+import { auth } from '@/auth';
+import { Groq } from 'groq-sdk';
+import { recordAuditLog } from '@/app/[locale]/actions/audit';
 
-// const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); // Configurer la clé API
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Authentification requise pour le chat IA." }, { status: 401 });
-  }
+  if (!session?.user?.id) return new Response("Unauthorized", { status: 401 });
 
-  const { message, context } = await req.json(); // message: question, context: page, projectId, etc.
-
-  // 1. Enrichir le contexte (Base de données)
-  let projectData = null;
-  let libraryData = null;
-  if (context.projectId) {
-    projectData = await db.project.findUnique({ where: { id: context.projectId } });
-    if (projectData) {
-        libraryData = await db.libraryItem.findMany({ where: { domain: projectData.domain } });
-    }
-  }
-
-  // 2. Construire le Prompt (Contextualisé)
-  let systemPrompt = `Vous êtes Quantum AI, un assistant expert en ingénierie industrielle. Répondez aux questions sur la simulation, les équipements et la chimie.`;
-  
-  let userPrompt = `Je suis sur la page "${context.page}". Mon projet est "${projectData?.name || 'Inconnu'}" (ID: ${context.projectId || 'N/A'}). Ma question: "${message}"`;
-
-  if (libraryData && libraryData.length > 0) {
-    userPrompt += `\n\nContexte de la Librairie: ${JSON.stringify(libraryData.slice(0, 5).map(item => item.name))}`; // Limiter pour éviter les tokens
-  }
-  if (projectData) {
-    userPrompt += `\n\nParamètres du Projet: ${JSON.stringify(projectData.properties)}`;
-  }
-  // Ajouter d'autres détails de la page si pertinents (ex: la liste des noeuds du graphe)
+  const { message, context } = await req.json();
 
   try {
-    // 3. Appel à l'API LLM (Exemple avec OpenAI)
-    // const chatCompletion = await openai.chat.completions.create({
-    //   model: "gpt-4-turbo-preview", // Ou autre modèle
-    //   messages: [
-    //     { role: "system", content: systemPrompt },
-    //     { role: "user", content: userPrompt }
-    //   ],
-    //   stream: false, // Pour l'instant pas de streaming pour simplifier
-    // });
+    // 1. RÉCUPÉRATION DU CONTEXTE TECHNIQUE
+    let projectContext = "Aucune donnée de projet disponible.";
+    if (context.projectId) {
+      const project = await db.project.findUnique({
+        where: { id: context.projectId },
+        include: { systems: { include: { nodes: true } } }
+      });
+      if (project) {
+        projectContext = `PROJET: ${project.name} | DOMAINE: ${project.domain}
+        UNITÉS PROJET: ${project.systems.map(s => 
+          s.nodes.map(n => `- ${n.label} (${n.type}): ${JSON.stringify(n.properties)}`).join('\n')
+        ).join('\n')}`;
+      }
+    }
 
-    // const aiResponse = chatCompletion.choices[0].message.content;
-    const aiResponse = `Je suis une IA factice. Contexte reçu: ${userPrompt.slice(0, 200)}...`; // Réponse mockée
+    // 2. APPEL GROQ EN MODE STREAM
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        { 
+          role: "system", 
+          content: `Vous êtes Quantum AI, expert en ingénierie de surface. 
+          Analysez le contexte technique suivant pour aider l'utilisateur. 
+          Répondez en Markdown de manière concise et technique.` 
+        },
+        { role: "user", content: `CONTEXTE:\n${projectContext}\n\nQUESTION: ${message}` }
+      ],
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      temperature: 0.2,
+      stream: true, // Activation du streaming
+    });
 
-    await recordAuditLog("AI_CHAT", projectData?.domain, { context, message, aiResponse: aiResponse.slice(0, 100) });
+    // 3. CRÉATION DU FLUX DE RÉPONSE (ReadableStream)
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        for await (const chunk of chatCompletion) {
+          const content = chunk.choices[0]?.delta?.content || "";
+          controller.enqueue(encoder.encode(content));
+        }
+        controller.close();
+      },
+    });
 
-    return NextResponse.json({ response: aiResponse });
+    // Log d'audit (sans attendre la fin pour ne pas bloquer le stream)
+    recordAuditLog("AI_CHAT_STREAM", context.domain, { message });
+
+    return new Response(stream, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
 
   } catch (error: any) {
-    console.error("AI Chat API Error:", error);
-    await recordAuditLog("AI_CHAT_ERROR", projectData?.domain, { context, message, error: error.message });
-    return NextResponse.json({ error: "Erreur de communication avec l'IA." }, { status: 500 });
+    console.error("Groq Error:", error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }
