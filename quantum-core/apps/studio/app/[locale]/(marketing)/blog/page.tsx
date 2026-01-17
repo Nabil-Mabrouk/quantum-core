@@ -1,56 +1,93 @@
 import { db } from "@repo/database";
+import { BlogSearchGrid } from "@/components/marketing/blog-search-grid";
+import { Hexagon, ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { Calendar, Tag, ChevronRight } from "lucide-react";
 
-export default async function BlogPage() {
-  const domain = process.env.NEXT_PUBLIC_ACTIVE_DOMAIN || "WATER";
-  const posts = await db.post.findMany({
-    where: { domain, published: true },
-    orderBy: { createdAt: 'desc' }
-  });
+export default async function BlogPage(props: { 
+  params: Promise<{ locale: string }>,
+  searchParams: Promise<{ page?: string, tag?: string, q?: string }> 
+}) {
+  const { locale } = await props.params;
+  const { page, tag, q } = await props.searchParams;
+
+  const POSTS_PER_PAGE = 9;
+  const currentPage = parseInt(page || "1");
+  const isFiltering = !!(tag || q);
+
+  // 1. Récupération des données pour le mode "Filtré" ou "Récent"
+  const where: any = { published: true };
+  if (tag) where.tags = { contains: tag, mode: 'insensitive' };
+  if (q) {
+    where.OR = [
+      { title: { contains: q, mode: 'insensitive' } },
+      { excerpt: { contains: q, mode: 'insensitive' } }
+    ];
+  }
+
+  // 2. Requêtes parallèles
+  const [
+    filteredPosts, 
+    popularPosts, 
+    allPostsForTags, 
+    totalPosts
+  ] = await Promise.all([
+    // Grille principale (filtrée ou récente)
+    db.post.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: POSTS_PER_PAGE,
+      skip: (currentPage - 1) * POSTS_PER_PAGE,
+    }),
+    // Articles populaires (Top 3) - Nécessite une colonne 'views' dans votre schéma
+    db.post.findMany({
+      where: { published: true },
+      orderBy: { views: 'desc' }, // Fallback sur 'updatedAt' si views n'existe pas encore
+      take: 3
+    }),
+    // Pour le nuage de tags
+    db.post.findMany({ where: { published: true }, select: { tags: true } }),
+    db.post.count({ where })
+  ]);
+
+  const totalPages = Math.ceil(totalPosts / POSTS_PER_PAGE);
 
   return (
-    <div className="bg-slate-50 min-h-screen py-20 px-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="mb-16">
-            <h1 className="text-5xl font-black text-slate-900 tracking-tighter mb-4">Expertise Technique</h1>
-            <p className="text-xl text-slate-500 italic max-w-2xl">
-                Retrouvez nos guides d'ingénierie et analyses sur le {domain === 'WATER' ? 'traitement des eaux' : 'secteur énergétique'}.
-            </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {posts.map(post => (
-            <Link href={`/blog/${post.slug}`} key={post.id} className="group">
-              <div className="h-full bg-white border border-slate-200 p-8 rounded-[2rem] hover:border-blue-500 hover:shadow-2xl hover:shadow-blue-500/10 transition-all flex flex-col">
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(post.createdAt).toLocaleDateString()}
-                    </div>
-                </div>
-                
-                <h2 className="text-2xl font-black text-slate-800 group-hover:text-blue-600 transition-colors leading-tight mb-4">
-                    {post.title}
-                </h2>
-                
-                <p className="text-slate-500 text-sm line-clamp-3 mb-8 italic">
-                    {post.excerpt || "Découvrez notre analyse technique détaillée sur ce sujet..."}
-                </p>
-
-                <div className="mt-auto flex items-center justify-between border-t border-slate-50 pt-6">
-                    <div className="flex gap-2">
-                        {post.tags?.split(',').map((tag: string) => (
-                            <span key={tag} className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-md uppercase">{tag.trim()}</span>
-                        ))}
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
-                </div>
-              </div>
+    <div className="bg-white min-h-screen pb-20">
+      <section className="bg-slate-50 border-b border-slate-100 pt-20 pb-16 px-6">
+        <div className="max-w-6xl mx-auto">
+            <Link href={`/${locale}`} className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-12 hover:gap-3 transition-all group">
+                <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" /> Back to home
             </Link>
-          ))}
+            
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+                <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg">
+                            <Hexagon size={20} className="fill-current" />
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Engineering Ledger</span>
+                    </div>
+                    <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter leading-[0.85]">
+                        Expertise & <br/><span className="text-blue-600">Engineering.</span>
+                    </h1>
+                </div>
+            </div>
         </div>
-      </div>
+      </section>
+
+      <main className="max-w-6xl mx-auto px-6 -mt-8">
+        <BlogSearchGrid 
+            initialPosts={filteredPosts} 
+            popularPosts={popularPosts}
+            allTagsData={allPostsForTags || []} 
+            locale={locale}
+            totalPages={totalPages}
+            currentPage={currentPage}
+            activeTag={tag}
+            activeQuery={q}
+            isFiltering={isFiltering}
+        />
+      </main>
     </div>
   );
 }

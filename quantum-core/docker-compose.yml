@@ -24,21 +24,20 @@ services:
       - INTERNAL_API_SECRET=super-secret-quantum-key-2026
       - PYTHONUNBUFFERED=1
 
-  # 3. Studio (Next.js)
-  # Pour le dev local, on utilise souvent npm run dev directement sur la machine 
-  # pour avoir le HMR (Hot Reload) rapide, mais voici la config Docker si besoin.
+  # 3. Studio (Préparation pour le futur ou le déploiement)
   # studio:
   #   build: 
   #     context: .
-  #     dockerfile: apps/studio/Dockerfile
+  #     dockerfile: apps/studio/Dockerfile.dev
   #   ports:
   #     - "3000:3000"
+  #   volumes:
+  #     - .:/app
+  #     - /app/node_modules
+  #     - ./apps/studio/public/uploads:/app/apps/studio/public/uploads # Persistance des images
   #   environment:
   #     - DATABASE_URL=postgresql://quantum:password@postgres:5432/quantum_core
   #     - ENGINE_URL=http://engine:8000
-  #   depends_on:
-  #     - postgres
-  #     - engine
 
 volumes:
   postgres_data:

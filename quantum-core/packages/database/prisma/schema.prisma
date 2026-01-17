@@ -83,6 +83,7 @@ model Post {
   tags      String?
   authorId  String
   author    User     @relation(fields: [authorId], references: [id])
+  views     Int      @default(0) // <--- AJOUTEZ CETTE LIGNE
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

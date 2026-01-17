@@ -15,6 +15,7 @@ const PostSchema = z.object({
   excerpt: z.string().max(500).optional(),
   tags: z.string().optional(),
   published: z.boolean().default(false),
+  image: z.string().optional().nullable(),
 });
 
 export async function exportBlogToZipAction() {
@@ -107,6 +108,7 @@ export async function updatePostAction(prevState: any, formData: FormData) {
     content: formData.get('content'),
     excerpt: formData.get('excerpt'),
     tags: formData.get('tags'),
+    image: formData.get('image'), // <--- 3. RÉCUPÉRER L'URL DE L'IMAGE
     published: formData.get('published') === 'on',
   });
 
@@ -125,6 +127,7 @@ export async function updatePostAction(prevState: any, formData: FormData) {
         excerpt: data.excerpt,
         tags: data.tags,
         published: data.published,
+        image: data.image,
       }
     });
     
