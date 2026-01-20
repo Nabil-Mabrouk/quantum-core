@@ -15,23 +15,23 @@ async function requireAdmin() {
 
 export async function seedCatalog() {
   await requireAdmin();
+  const domain = process.env.NEXT_PUBLIC_ACTIVE_DOMAIN || "SURFACE_TREATMENT";
   
   const items = [
     {
-      domain: "WATER",
+      domain,
       category: "PUMP",
       name: "Pompe doseuse Grundfos DDA",
-      // We map "specs" to "properties" for the DB
       properties: { flow: 30, power: 0.5, price: 1200 }
     },
     {
-      domain: "WATER",
+      domain,
       category: "PUMP",
       name: "Pompe de transfert IWAKI MDX",
       properties: { flow: 15, power: 0.2, price: 850 }
     },
     {
-      domain: "WATER",
+      domain,
       category: "TANK",
       name: "Cuve PEHD 1000L Standard",
       properties: { volume: 1000, price: 500, material: "PP" }
@@ -39,13 +39,12 @@ export async function seedCatalog() {
   ];
 
   for (const item of items) {
-    // We use ReferenceItem instead of CatalogItem
-    // 'name' is unique in the schema, allowing upsert
-    await db.referenceItem.upsert({
+    await db.libraryItem.upsert({
       where: { name: item.name },
       update: {
         category: item.category,
-        properties: item.properties
+        properties: item.properties,
+        domain: item.domain
       },
       create: {
         domain: item.domain,
@@ -58,13 +57,25 @@ export async function seedCatalog() {
   return { success: true };
 }
 
-export async function getCatalogItems(category: string) {
-  const items = await db.referenceItem.findMany({
-    where: { category, domain: "WATER" }
+// --- CORRECTION DU TYPE ET DE LA LOGIQUE PRISMA ---
+export async function getCatalogItems(category: string | string[]) {
+  const domain = process.env.NEXT_PUBLIC_ACTIVE_DOMAIN || "SURFACE_TREATMENT";
+  
+  // 1. Construction dynamique de la clause Where
+  const where: any = { domain };
+
+  if (Array.isArray(category)) {
+    // Si on reçoit un tableau ["REAGENT", "ION"], on utilise l'opérateur IN de Prisma
+    where.category = { in: category };
+  } else {
+    // Sinon on fait une égalité simple
+    where.category = category;
+  }
+
+  const items = await db.libraryItem.findMany({
+    where
   });
 
-  // UI Compatibility Layer:
-  // The UI expects 'specs', but DB has 'properties'. We map it back.
   return items.map(item => ({
     ...item,
     specs: item.properties

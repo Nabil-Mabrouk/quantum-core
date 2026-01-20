@@ -41,15 +41,54 @@ async function getAuthenticatedSystem(systemId: string, userId: string | undefin
   return system;
 }
 
-// --- TYPES ---
+// --- NETWORK UTILS ---
 
-type SimulationNode = {
-  id: string;
-  type: string;
-  properties: Record<string, any>;
-  inputStreamId?: string | null;
-  outputStreamId?: string | null;
-};
+/**
+ * Appelle le moteur de calcul Python avec un Timeout de sécurité
+ */
+async function callEngine(endpoint: string, payload: any) {
+  const engineUrl = process.env.ENGINE_URL;
+  const secret = process.env.INTERNAL_API_SECRET;
+
+  if (!engineUrl || !secret) {
+    return { success: false, error: "Configuration serveur manquante (URL ou Secret)" };
+  }
+
+  // SÉCURITÉ : Timeout de 15 secondes pour éviter le blocage UI
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(`${engineUrl}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': secret,
+      },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+      signal: controller.signal, // Lier le signal d'abort
+    });
+
+    clearTimeout(timeoutId); // Annuler le timeout si réponse reçue
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      return { success: false, error: `Moteur Python (${response.status}): ${errorBody}` };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+        return { success: false, error: "Le moteur de calcul ne répond pas (Timeout 15s)." };
+    }
+    return { success: false, error: "Incapable de joindre le moteur : " + error.message };
+  }
+}
+
+// --- HELPER WIRELESS & FORMATTING ---
 
 type AppNodeWithData = {
   id: string;
@@ -60,67 +99,8 @@ type AppNodeWithData = {
   };
 };
 
-type SimulationEdge = {
-  id: string;
-  source: string;
-  target: string;
-  type?: string;
-  properties: Record<string, any>;
-};
-
-type SimulationSequence = {
-  id: string;
-  name: string;
-  steps: string[];
-  properties: Record<string, any>;
-};
-
-type ProjectSimulationPayload = {
-  projectId: string;
-  domain: string;
-  systems: any[];
-  streams: any[];
-  library: any;
-};
-
-/**
- * Appelle le moteur de calcul Python
- */
-async function callEngine(endpoint: string, payload: any) {
-  const engineUrl = process.env.ENGINE_URL;
-  const secret = process.env.INTERNAL_API_SECRET;
-
-  if (!engineUrl || !secret) {
-    return { success: false, error: "Configuration serveur manquante (URL ou Secret)" };
-  }
-
-  try {
-    const response = await fetch(`${engineUrl}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-secret': secret,
-      },
-      body: JSON.stringify(payload),
-      cache: 'no-store'
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      return { success: false, error: `Moteur Python (${response.status}): ${errorBody}` };
-    }
-
-    const data = await response.json();
-    return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: "Incapable de joindre le moteur : " + error.message };
-  }
-}
-
-// --- HELPER WIRELESS ---
-
-function createVirtualEdges(nodes: AppNodeWithData[], domainManifest: any): SimulationEdge[] {
-  const virtualEdges: SimulationEdge[] = [];
+function createVirtualEdges(nodes: AppNodeWithData[], domainManifest: any) {
+  const virtualEdges: any[] = [];
   const nodeMap = new Map(nodes.map(node => [node.id, node]));
 
   nodes.forEach(sourceNode => {
@@ -146,8 +126,8 @@ function createVirtualEdges(nodes: AppNodeWithData[], domainManifest: any): Simu
   return virtualEdges;
 }
 
-function deduplicateEdges(physicalEdges: any[], virtualEdges: SimulationEdge[]): SimulationEdge[] {
-  const finalEdges: SimulationEdge[] = [...virtualEdges];
+function deduplicateEdges(physicalEdges: any[], virtualEdges: any[]) {
+  const finalEdges = [...virtualEdges];
   const virtualEdgeSet = new Set<string>();
 
   virtualEdges.forEach(edge => {
@@ -189,6 +169,8 @@ function formatLibraryForPython(rawLibrary: any[]) {
     };
 }
 
+// --- SERVER ACTIONS ---
+
 /**
  * 1. SIMULATION D'UN SEUL SYSTÈME
  */
@@ -215,6 +197,7 @@ export async function runSimulationAction(domain: string, systemId: string, node
     library: formatLibraryForPython(library),
     nodes: nodes.map(n => {
       const props = { ...n.data.properties };
+      // Injection des données du bus (Project Streams)
       if (n.data.properties?.inputStreamId) {
         const stream = projectStreams.find(s => s.id === n.data.properties.inputStreamId);
         if (stream) {
@@ -286,7 +269,7 @@ export async function runGlobalProjectSimulation(projectId: string) {
     
     const formattedLibrary = formatLibraryForPython(rawLibrary);
 
-    const payload: ProjectSimulationPayload = {
+    const payload = {
       projectId: project.id,
       domain: project.domain,
       library: formattedLibrary,

@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { db } from '@repo/database';
 import { auth } from '@/auth';
 import { Groq } from 'groq-sdk';
-import { recordAuditLog } from '@/app/[locale]/actions/audit';
+import { recordAuditLog } from '@/app/actions/audit';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 

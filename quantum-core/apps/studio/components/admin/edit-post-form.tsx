@@ -2,32 +2,48 @@
 
 import { useState, useActionState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { updatePostAction } from '@/app/actions/admin-blog'; // Vérifie bien le chemin
-import { uploadImageAction } from '@/app/actions/upload';    // Vérifie bien le chemin
+import { updatePostAction } from '@/app/actions/admin-blog';
+import { uploadImageAction } from '@/app/actions/upload';
 import { 
-  Save, Layout, FileEdit, Loader2, Tag as TagIcon, 
-  X, Plus, Eye, Edit3, Image as ImageIcon, 
-  ArrowLeft, Clock, Hash, Trash2, UploadCloud, AlertCircle
+  Save, Layout, Edit3, Loader2, Tag as TagIcon, 
+  X, Plus, Eye, Image as ImageIcon, 
+  ArrowLeft, Clock, Hash, Trash2, UploadCloud, 
+  BookOpen, ListOrdered,
+  Globe,
+  AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MarkdownViewer } from '@/components/ui/markdown-viewer';
 import { clsx } from 'clsx';
 
-export function EditPostForm({ post, existingTags = [] }: { post: any, existingTags?: string[] }) {
+export function EditPostForm({ 
+  post, 
+  existingTags = [],
+  tutorials = [] 
+}: { 
+  post: any, 
+  existingTags?: string[],
+  tutorials?: any[] 
+}) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [state, formAction, isPending] = useActionState(updatePostAction, null);
   
-  // --- ÉTATS LOCAUX ---
+  // --- ÉTATS ---
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
-  const [title, setTitle] = useState(post.title || ''); // État contrôlé pour l'aperçu live
+  const [title, setTitle] = useState(post.title || '');
   const [content, setContent] = useState(post.content || '');
   const [tags, setTags] = useState<string[]>(post.tags ? post.tags.split(',').map((t: string) => t.trim()) : []);
   const [newTagInput, setNewTagInput] = useState('');
   const [heroImage, setHeroImage] = useState(post.image || '');
   const [isUploading, setIsUploading] = useState(false);
 
-  // --- CALCULS ÉDITORIAUX ---
+  // --- ÉTATS TUTORIELS & LANGUE ---
+  const [selectedTutorial, setSelectedTutorial] = useState(post.tutorialId || "");
+  const [order, setOrder] = useState(post.order || 0);
+  const [language, setLanguage] = useState(post.language || 'fr');
+
+  // --- MÉTRIQUES ÉDITORIALES ---
   const wordCount = useMemo(() => content.split(/\s+/).filter(w => w.length > 0).length, [content]);
   const readingTime = Math.ceil(wordCount / 200);
 
@@ -82,13 +98,17 @@ export function EditPostForm({ post, existingTags = [] }: { post: any, existingT
 
   return (
     <form action={formAction} className="max-w-[1600px] mx-auto grid grid-cols-12 gap-8 items-start pb-20">
-      {/* Inputs cachés synchronisés avec les états pour la Server Action */}
+      
+      {/* INPUTS CACHÉS POUR L'ACTION SERVEUR */}
       <input type="hidden" name="id" value={post.id} />
       <input type="hidden" name="tags" value={tags.join(',')} />
       <input type="hidden" name="image" value={heroImage} />
       <input type="hidden" name="title" value={title} />
-      
-      {/* 1. COLONNE GAUCHE (ÉDITION & APERÇU) */}
+      <input type="hidden" name="tutorialId" value={selectedTutorial} />
+      <input type="hidden" name="order" value={order} />
+      <input type="hidden" name="language" value={language} />
+
+      {/* 1. COLONNE GAUCHE (ÉDITEUR) */}
       <div className="col-span-12 lg:col-span-8 space-y-6">
         
         {/* BARRE D'OUTILS */}
@@ -132,7 +152,7 @@ export function EditPostForm({ post, existingTags = [] }: { post: any, existingT
           </div>
         </div>
 
-        {/* ZONE DE RÉDACTION */}
+        {/* ZONE D'ÉDITION */}
         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden min-h-[700px] flex flex-col">
           {viewMode === 'edit' ? (
             <>
@@ -173,7 +193,7 @@ export function EditPostForm({ post, existingTags = [] }: { post: any, existingT
         </div>
       </div>
 
-      {/* 2. BARRE LATÉRALE (PARAMÈTRES) */}
+      {/* 2. COLONNE DROITE (PARAMÈTRES) */}
       <aside className="col-span-12 lg:col-span-4 space-y-6 lg:sticky lg:top-28">
         
         {/* ACTIONS PRINCIPALES */}
@@ -193,6 +213,95 @@ export function EditPostForm({ post, existingTags = [] }: { post: any, existingT
             >
                 <ArrowLeft size={16} /> Annuler
             </button>
+        </div>
+
+        {/* --- SECTION LANGUE & SÉRIE --- */}
+        <div className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-lg space-y-6">
+            
+            {/* Langue du contenu */}
+            <div>
+                <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] flex items-center gap-2 mb-3">
+                    <Globe size={14} className="text-blue-500" /> Langue du contenu
+                </h4>
+                <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                    <button 
+                        type="button"
+                        onClick={() => setLanguage('fr')}
+                        className={clsx(
+                            "flex-1 py-2 text-xs font-bold rounded-lg transition-all", 
+                            language === 'fr' ? "bg-white text-blue-600 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"
+                        )}
+                    >
+                        Français
+                    </button>
+                    <button 
+                        type="button"
+                        onClick={() => setLanguage('en')}
+                        className={clsx(
+                            "flex-1 py-2 text-xs font-bold rounded-lg transition-all", 
+                            language === 'en' ? "bg-white text-blue-600 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"
+                        )}
+                    >
+                        English
+                    </button>
+                </div>
+            </div>
+
+            <div className="h-px bg-slate-100" />
+
+            {/* Série / Tutoriel */}
+            <div className="space-y-4">
+                <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] flex items-center gap-2">
+                    <BookOpen size={14} className="text-purple-500" /> Série / Tutoriel
+                </h4>
+                
+                <div className="space-y-3">
+                    <div className="space-y-1">
+                        <select 
+                            value={selectedTutorial}
+                            onChange={(e) => setSelectedTutorial(e.target.value)}
+                            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10 cursor-pointer transition-all"
+                        >
+                            <option value="">-- Article Indépendant --</option>
+                            {tutorials.map((tuto: any) => (
+                                <option key={tuto.id} value={tuto.id}>
+                                    {tuto.title} [{tuto.language.toUpperCase()}]
+                                </option>
+                            ))}
+                        </select>
+
+                        {/* Alerte si mismatch de langue */}
+                        {selectedTutorial && (() => {
+                            const t = tutorials.find(x => x.id === selectedTutorial);
+                            if (t && t.language !== language) {
+                                return (
+                                    <div className="flex items-start gap-2 p-3 mt-2 bg-orange-50 border border-orange-100 rounded-xl animate-in fade-in slide-in-from-top-1">
+                                        <AlertCircle size={14} className="text-orange-500 shrink-0 mt-0.5" />
+                                        <p className="text-[10px] text-orange-700 leading-relaxed font-medium">
+                                            Attention : Cette série est en <b>{t.language.toUpperCase()}</b> mais votre article est en <b>{language.toUpperCase()}</b>.
+                                        </p>
+                                    </div>
+                                )
+                            }
+                        })()}
+                    </div>
+
+                    {selectedTutorial && (
+                        <div className="space-y-1 animate-in fade-in slide-in-from-top-2">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1 ml-1">
+                                <ListOrdered size={12} /> Numéro de chapitre
+                            </label>
+                            <input 
+                                type="number" 
+                                min="0"
+                                value={order}
+                                onChange={(e) => setOrder(parseInt(e.target.value) || 0)}
+                                className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10"
+                            />
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
 
         {/* IMAGE DE COUVERTURE */}
@@ -236,7 +345,7 @@ export function EditPostForm({ post, existingTags = [] }: { post: any, existingT
             />
         </div>
 
-        {/* TAGS */}
+        {/* TAXONOMIE */}
         <div className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-lg space-y-6">
             <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] flex items-center gap-2">
                 <TagIcon size={14} className="text-blue-500" /> Taxonomie
@@ -297,7 +406,7 @@ export function EditPostForm({ post, existingTags = [] }: { post: any, existingT
             </div>
         </div>
 
-        {/* RÉSUMÉ / EXCERPT */}
+        {/* RÉSUMÉ SEO */}
         <div className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-lg space-y-4">
             <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] flex items-center gap-2">
                 <Layout size={14} className="text-blue-500" /> Résumé SEO

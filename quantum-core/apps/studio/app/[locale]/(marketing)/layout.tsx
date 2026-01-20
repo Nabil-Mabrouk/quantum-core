@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth"; // Import de signOut (version serveur)
 import { LayoutDashboard, LogIn, LogOut } from "lucide-react";
+import { LanguageSwitcher } from "@/components/layout/shell/language-switcher";
 
 export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -18,7 +19,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
 
           <nav className="flex items-center gap-6">
             <Link href="/blog" className="text-xs font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 transition-colors">Expertise</Link>
-            
+
             {session ? (
               <div className="flex items-center gap-3">
                 {/* BOUTON DASHBOARD (Action principale) */}
@@ -47,6 +48,10 @@ export default async function MarketingLayout({ children }: { children: React.Re
                 <LogIn className="w-4 h-4" /> Connexion
               </Link>
             )}
+            <div className="scale-90">
+                <LanguageSwitcher />
+            </div>
+
           </nav>
         </div>
       </header>

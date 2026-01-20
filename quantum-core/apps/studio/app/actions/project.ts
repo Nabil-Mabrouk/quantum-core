@@ -17,6 +17,14 @@ const ProjectSettingsSchema = z.object({
   weeksPerYear: z.number().min(1).max(52),
 });
 
+// 1. Define strict Schema
+const CreateProjectSchema = z.object({
+  name: z.string().trim().min(3, "Le nom doit contenir au moins 3 caractères").max(50),
+  domain: z.enum(["SURFACE_TREATMENT", "WATER", "ENERGY"])
+    .optional()
+    .default("SURFACE_TREATMENT"), // Fallback handled by Zod
+});
+
 // --- SECURITY HELPER ---
 /**
  * Checks if a user is authenticated and owns the specified project.
@@ -52,44 +60,49 @@ export async function createProjectAction(formData: FormData) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Non autorisé");
 
-  const validation = ProjectSchema.safeParse({
+  // 2. Parse FormData directly into an object for Zod
+  const rawData = {
     name: formData.get('name'),
-    domain: formData.get('domain'),
-  });
+    domain: formData.get('domain') || undefined, // Allow default to trigger
+  };
+
+  // 3. Validate
+  const validation = CreateProjectSchema.safeParse(rawData);
 
   if (!validation.success) {
     return { error: validation.error.errors[0].message };
   }
-  const name = formData.get('name') as string;
-  // Récupération du domaine depuis la modale, sinon fallback env ou valeur par défaut
-  const domain = (formData.get('domain') as string) || process.env.NEXT_PUBLIC_ACTIVE_DOMAIN || "SURFACE_TREATMENT";
+  // 4. Use SANITIZED data only
+  const { name, domain } = validation.data;
 
   const user = await db.user.findUnique({ where: { id: session.user.id } });
-  if (!user) throw new Error("Utilisateur non trouvé dans la base de données");
+  if (!user) throw new Error("Utilisateur non trouvé");
 
   // 1. Création du projet
-  const project = await db.project.create({
-    data: { 
-      name, 
-      domain, 
-      userId: user.id 
-    }
-  });
+  try {
+    const project = await db.project.create({
+      data: { 
+        name, 
+        domain, 
+        userId: user.id 
+      }
+    });
 
-  // 2. Création automatique du premier système (indispensable pour l'éditeur)
-  await db.system.create({
-    data: { 
-      name: "Système Principal", 
-      type: "PRODUCTION", 
-      projectId: project.id 
-    }
-  });
+    // Create default system
+    await db.system.create({
+      data: { 
+        name: "Système Principal", 
+        type: "PRODUCTION", 
+        projectId: project.id 
+      }
+    });
 
-  // Purge du cache du dashboard pour afficher la nouvelle carte
-  revalidatePath('/dashboard');
-
-  // On retourne l'ID au composant client pour qu'il gère router.push()
-  return { id: project.id };
+    revalidatePath('/dashboard');
+    return { id: project.id };
+  } catch (error) {
+    console.error("DB Error:", error);
+    return { error: "Erreur lors de la création en base de données." };
+  }
 }
 
 /**

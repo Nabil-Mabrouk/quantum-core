@@ -2,12 +2,16 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Search, ArrowRight, ArrowLeft, Hexagon, X, Hash, Eye, Clock, Sparkles } from 'lucide-react';
+import { 
+  Search, ArrowRight, ArrowLeft, Hexagon, Hash, 
+  Clock, Sparkles, BookOpen, GraduationCap, ChevronRight 
+} from 'lucide-react';
 import { clsx } from 'clsx';
 
 export function BlogSearchGrid({ 
+    tutorials = [],
     initialPosts = [], 
     popularPosts = [],
     allTagsData = [], 
@@ -20,7 +24,30 @@ export function BlogSearchGrid({
 }: any) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [searchValue, setSearchValue] = useState(activeQuery || '');
+
+  // --- LOGIQUE UNIQUE DE MISE À JOUR DE L'URL ---
+  const updateFilters = (newParams: Record<string, string | null>) => {
+    // On récupère les paramètres actuels pour les préserver
+    const params = new URLSearchParams(searchParams.toString());
+    
+    Object.entries(newParams).forEach(([key, value]) => {
+      if (value === null || value === "") {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+    });
+
+    // 🚩 RÉPARATION : On ne force "page=1" QUE si on n'est pas en train de paginer.
+    // Si newParams contient 'page', c'est qu'on a cliqué sur Suivant/Précédent.
+    if (!newParams.hasOwnProperty('page')) {
+      params.set('page', '1');
+    }
+
+    router.push(`${pathname}?${params.toString()}`, { scroll: true });
+  };
 
   // Nuage de tags
   const tagCloud = useMemo(() => {
@@ -39,26 +66,16 @@ export function BlogSearchGrid({
       .slice(0, 30);
   }, [allTagsData]);
 
-  const updateFilters = (newParams: Record<string, string | null>) => {
-    const params = new URLSearchParams(window.location.search);
-    Object.entries(newParams).forEach(([key, value]) => {
-      if (value) params.set(key, value);
-      else params.delete(key);
-    });
-    params.set('page', '1');
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
-  };
-
   return (
     <div className="space-y-20">
-      {/* 1. RECHERCHE */}
+      {/* 1. BARRE DE RECHERCHE */}
       <div className="bg-white border border-slate-200 p-2 rounded-[2rem] shadow-2xl flex items-center gap-4 group focus-within:ring-8 focus-within:ring-blue-50 transition-all">
         <div className="pl-6 text-slate-300 group-focus-within:text-blue-500 transition-colors">
             <Search size={24} />
         </div>
         <input 
             type="text"
-            placeholder="Search keywords, technologies, or architectures..."
+            placeholder={locale === 'fr' ? "Rechercher une expertise, technologie..." : "Search keywords, technologies..."}
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && updateFilters({ q: searchValue })}
@@ -66,11 +83,52 @@ export function BlogSearchGrid({
         />
       </div>
 
-      {/* 2. NUAGE DE TAGS */}
+      {/* 2. SECTION TUTORIELS (Uniquement si pas de recherche active) */}
+      {!isFiltering && tutorials.length > 0 && (
+        <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="flex items-center gap-4">
+                <GraduationCap className="text-blue-600" size={24} />
+                <h2 className="text-2xl font-black tracking-tight uppercase">
+                    {locale === 'fr' ? "Parcours d'apprentissage" : "Learning Paths"}
+                </h2>
+                <div className="h-px bg-slate-100 flex-1" />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {tutorials.map((tuto: any) => (
+                    <Link 
+                        key={tuto.id}
+                        href={`/${locale}/blog/${tuto.posts[0]?.slug || '#'}`}
+                        className="group relative bg-slate-900 rounded-[2.5rem] p-8 overflow-hidden transition-all hover:scale-[1.01] hover:shadow-2xl shadow-blue-900/20"
+                    >
+                        <BookOpen className="absolute -right-10 -bottom-10 w-48 h-48 text-white/5 -rotate-12 transition-transform group-hover:rotate-0 duration-700" />
+                        
+                        <div className="relative z-10 flex flex-col h-full">
+                            <span className="px-3 py-1 bg-blue-500 text-white text-[9px] font-black uppercase tracking-widest rounded-full w-fit mb-4">
+                                {tuto._count.posts} {locale === 'fr' ? 'Chapitres' : 'Chapters'}
+                            </span>
+                            <h3 className="text-2xl font-black text-white mb-3 tracking-tighter">
+                                {tuto.title}
+                            </h3>
+                            <p className="text-slate-400 text-sm leading-relaxed mb-8 line-clamp-2">
+                                {tuto.description || (locale === 'fr' ? "Maîtrisez ce sujet de A à Z." : "Master this subject from A to Z.")}
+                            </p>
+                            
+                            <div className="mt-auto flex items-center gap-2 text-blue-400 text-[10px] font-black uppercase tracking-widest group-hover:gap-4 transition-all">
+                                {locale === 'fr' ? "Commencer la série" : "Start series"} <ChevronRight size={14} />
+                            </div>
+                        </div>
+                    </Link>
+                ))}
+            </div>
+        </section>
+      )}
+
+      {/* 3. NUAGE DE TAGS */}
       <div className="space-y-8 bg-slate-50/50 p-10 rounded-[3rem] border border-slate-100">
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">
-                <Hash size={14} /> Thematic Cloud
+                <Hash size={14} /> {locale === 'fr' ? 'Thématiques' : 'Thematic Cloud'}
             </div>
         </div>
         <div className="flex flex-wrap justify-center items-center gap-x-8 gap-y-6">
@@ -90,28 +148,31 @@ export function BlogSearchGrid({
         </div>
       </div>
 
-      {/* 3. AFFICHAGE DES ARTICLES */}
-      {!isFiltering ? (
-        <>
-          {/* SECTION POPULAIRES */}
-          <section className="space-y-10">
-            <div className="flex items-center gap-4">
-                <Sparkles className="text-amber-500" size={20} />
-                <h2 className="text-2xl font-black tracking-tight uppercase">Most Consulted</h2>
-                <div className="h-px bg-slate-100 flex-1" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {popularPosts.map((post: any) => (
-                    <PostCard key={post.id} post={post} locale={locale} isFeatured />
-                ))}
-            </div>
-          </section>
+      {/* 4. AFFICHAGE DES ARTICLES */}
+      <div className="space-y-20">
+          {!isFiltering && popularPosts.length > 0 && (
+            <section className="space-y-10">
+                <div className="flex items-center gap-4">
+                    <Sparkles className="text-amber-500" size={20} />
+                    <h2 className="text-2xl font-black tracking-tight uppercase">
+                        {locale === 'fr' ? 'Les plus consultés' : 'Most Consulted'}
+                    </h2>
+                    <div className="h-px bg-slate-100 flex-1" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {popularPosts.map((post: any) => (
+                        <PostCard key={post.id} post={post} locale={locale} isFeatured />
+                    ))}
+                </div>
+            </section>
+          )}
 
-          {/* SECTION RÉCENTS */}
           <section className="space-y-10">
             <div className="flex items-center gap-4">
                 <Clock className="text-blue-500" size={20} />
-                <h2 className="text-2xl font-black tracking-tight uppercase">Latest Analysis</h2>
+                <h2 className="text-2xl font-black tracking-tight uppercase">
+                    {isFiltering ? (locale === 'fr' ? 'Résultats' : 'Results') : (locale === 'fr' ? 'Dernières analyses' : 'Latest Analysis')}
+                </h2>
                 <div className="h-px bg-slate-100 flex-1" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -119,38 +180,35 @@ export function BlogSearchGrid({
                     <PostCard key={post.id} post={post} locale={locale} />
                 ))}
             </div>
+            {initialPosts.length === 0 && (
+                <div className="py-20 text-center text-slate-400 italic">
+                    {locale === 'fr' ? "Aucun article trouvé." : "No articles found."}
+                </div>
+            )}
           </section>
-        </>
-      ) : (
-        /* MODE FILTRÉ */
-        <section className="space-y-10">
-            <h2 className="text-2xl font-black tracking-tight uppercase">
-                Results for {activeTag ? `#${activeTag}` : `"${activeQuery}"`}
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {initialPosts.map((post: any) => (
-                    <PostCard key={post.id} post={post} locale={locale} />
-                ))}
-            </div>
-        </section>
-      )}
+      </div>
 
-      {/* PAGINATION (simplifiée) */}
+      {/* 5. PAGINATION */}
       {totalPages > 1 && (
         <div className="pt-20 border-t border-slate-100 flex items-center justify-between">
             <button 
                 disabled={currentPage <= 1}
                 onClick={() => updateFilters({ page: (currentPage - 1).toString() })}
-                className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 disabled:opacity-20"
+                className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-900 disabled:opacity-20 hover:gap-4 transition-all"
             >
-                <ArrowLeft size={16} /> Previous
+                <ArrowLeft size={16} /> {locale === 'fr' ? 'Précédent' : 'Previous'}
             </button>
+            
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Page {currentPage} / {totalPages}
+            </div>
+
             <button 
                 disabled={currentPage >= totalPages}
                 onClick={() => updateFilters({ page: (currentPage + 1).toString() })}
-                className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 disabled:opacity-20"
+                className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-900 disabled:opacity-20 hover:gap-4 transition-all"
             >
-                Next <ArrowRight size={16} />
+                {locale === 'fr' ? 'Suivant' : 'Next'} <ArrowRight size={16} />
             </button>
         </div>
       )}
@@ -158,22 +216,17 @@ export function BlogSearchGrid({
   );
 }
 
-/**
- * SOUS-COMPOSANT : CARTE ARTICLE
- * Gère l'affichage de l'image ou de l'hexagone de remplacement
- */
 function PostCard({ post, locale, isFeatured }: any) {
   return (
-    <Link href={`/${locale}/blog/${post.slug}`} className="group flex flex-col h-full">
+    <Link href={`/${post.language}/blog/${post.slug}`} className="group flex flex-col h-full">
       <div className={clsx(
           "mb-6 overflow-hidden rounded-[2.5rem] bg-slate-50 relative border border-slate-100 transition-all duration-500 group-hover:shadow-2xl group-hover:border-blue-200",
           isFeatured ? "aspect-[16/9] shadow-lg" : "aspect-[16/10]"
       )}>
-        {/* LOGIQUE IMAGE : Image réelle OU Hexagone fallack */}
         {post.image ? (
             <img 
               src={post.image} 
-              alt={post.title}
+              alt=""
               className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
             />
         ) : (
@@ -181,13 +234,9 @@ function PostCard({ post, locale, isFeatured }: any) {
                 <div className="opacity-[0.03] group-hover:opacity-[0.08] transition-opacity duration-700">
                     <Hexagon size={isFeatured ? 200 : 120} className="text-slate-950" />
                 </div>
-                <span className="absolute text-[10px] font-black text-slate-200 uppercase tracking-widest">
-                    Quantum Ledger
-                </span>
             </div>
         )}
 
-        {/* Badge de catégorie (1er tag) */}
         <div className="absolute bottom-6 left-6">
             <span className="px-3 py-1 bg-white/90 backdrop-blur-sm text-[9px] font-black uppercase tracking-widest text-blue-600 rounded-lg shadow-sm border border-white">
                 {post.tags?.split(',')[0]}
@@ -214,7 +263,7 @@ function PostCard({ post, locale, isFeatured }: any) {
             {post.excerpt}
         </p>
         <div className="pt-4 mt-auto flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-900 group-hover:gap-4 transition-all group-hover:text-blue-600">
-            Read Analysis <ArrowRight size={14} />
+            {locale === 'fr' ? 'Lire l\'analyse' : 'Read Analysis'} <ArrowRight size={14} />
         </div>
       </div>
     </Link>

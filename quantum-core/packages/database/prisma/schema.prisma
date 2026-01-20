@@ -73,6 +73,8 @@ model VerificationToken {
 // ==========================================
 model Post {
   id        String   @id @default(cuid())
+  translationId String    @default(cuid()) // Links FR and EN versions together
+  language      String    @default("fr")
   domain    String
   title     String
   slug      String // Pas de @unique ici si tu as @@unique en bas
@@ -83,11 +85,14 @@ model Post {
   tags      String?
   authorId  String
   author    User     @relation(fields: [authorId], references: [id])
+  tutorialId    String?
+  tutorial      Tutorial? @relation(fields: [tutorialId], references: [id])
+  order         Int       @default(0)
   views     Int      @default(0) // <--- AJOUTEZ CETTE LIGNE
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([domain, slug]) // C'est cette ligne qui crée la clé "domain_slug"
+   @@unique([language, slug]) 
 }
 
 model Lead {
@@ -318,4 +323,24 @@ model AuditLog {
   userId    String? @default(cuid())
   details   Json?
   createdAt DateTime @default(now())
+}
+
+model Tutorial {
+  id            String   @id @default(cuid())
+  translationId String   @default(cuid()) // Links FR and EN versions together
+  language      String   @default("fr")   // The language of this specific record
+  
+  domain        String
+  title         String
+  slug          String   
+  description   String?  @db.Text
+  published     Boolean  @default(false)
+  
+  posts         Post[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Unique slug PER language (e.g. /fr/tuto-1 and /en/tutorial-1)
+  @@unique([language, slug]) 
 }

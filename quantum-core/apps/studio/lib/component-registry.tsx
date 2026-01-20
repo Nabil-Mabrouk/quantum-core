@@ -1,9 +1,11 @@
+// apps/studio/lib/component-registry.tsx
+
 import { SmartNode } from '@/components/canvas/smart-node';
 import { GenericNode } from '@/components/canvas/generic-node';
 
-// Import des composants spécifiques au domaine (Renommés et déplacés)
+// Import des composants spécifiques au domaine
 import { EndpointNode } from '@/components/domains/surface_treatment/endpoint-node';
-import { StreamConnectionWidget } from '@/components/domains/surface_treatment/stream-connection-widget';
+import { WaterPropertiesWidget } from '@/components/domains/surface_treatment/water-properties-widget';
 import { NetworkManager } from '@/components/domains/surface_treatment/network-manager';
 import { ProcessReport } from '@/components/domains/surface_treatment/process-report';
 
@@ -18,10 +20,10 @@ type ComponentMap = {
 
 // --- LE REGISTRE ---
 const REGISTRY: Record<string, ComponentMap> = {
-  // DOMAINE UNIQUE : SURFACE TREATMENT (Nettoyé)
+  // DOMAINE : SURFACE TREATMENT (Mise à jour Chapitre 6)
   SURFACE_TREATMENT: {
     nodes: {
-      // Les équipements principaux utilisent le SmartNode générique (Cartes Riches)
+      // Les équipements principaux utilisent le SmartNode spécialisé (Health Bars, etc.)
       PROCESS_BATH: SmartNode,
       RINSE_TANK: SmartNode,
       EVAPORATOR: SmartNode,
@@ -32,21 +34,22 @@ const REGISTRY: Record<string, ComponentMap> = {
       SOURCE: EndpointNode
     },
     forms: {
-      // Plus besoin de formulaires spécifiques ! 
-      // Le PropertiesPanel générique gère maintenant les Collections (Chimie) nativement.
+      // Géré dynamiquement par le PropertiesPanel générique via le Manifeste
     },
     widgets: {
-      // Widget pour connecter les flux globaux (Bus Projet)
-      PROCESS_BATH: StreamConnectionWidget,
-      RINSE_TANK: StreamConnectionWidget,
-      DRAIN: StreamConnectionWidget,
-      SOURCE: StreamConnectionWidget,
+      // On utilise le WaterPropertiesWidget pour tout ce qui touche à l'eau et aux flux
+      // Ce widget gère à la fois le Bus Projet (Drain/Source) et les Appoints/Surverses (Baths/Rinses)
+      PROCESS_BATH: WaterPropertiesWidget,
+      RINSE_TANK: WaterPropertiesWidget,
+      DRAIN: WaterPropertiesWidget,
+      SOURCE: WaterPropertiesWidget,
     },
     panels: {
-      // Affiche la liste des réseaux quand on clique dans le vide
+      // Affiche le gestionnaire de réseaux local quand rien n'est sélectionné
       EMPTY_SELECTION: NetworkManager 
     },
     reports: {
+      // Le rapport complet de bilan de masse et ionique
       SUMMARY: ProcessReport
     }
   }
@@ -54,28 +57,44 @@ const REGISTRY: Record<string, ComponentMap> = {
 
 // --- HELPERS D'ACCÈS ---
 
+/**
+ * Retourne le composant visuel pour le noeud sur le canvas
+ */
 export function getDomainNode(domain: string, type: string) {
-  // Si pas de composant spécifique, on renvoie GenericNode par défaut
   return REGISTRY[domain]?.nodes[type] || GenericNode; 
 }
 
+/**
+ * Retourne un formulaire spécifique si défini (prioritaire sur le générique)
+ */
 export function getDomainForm(domain: string, type: string) {
   return REGISTRY[domain]?.forms[type] || undefined;
 }
 
+/**
+ * Retourne un widget additionnel à afficher en haut du panneau de propriétés
+ */
 export function getDomainWidget(domain: string, type: string) {
   return REGISTRY[domain]?.widgets[type] || undefined;
 }
 
+/**
+ * Retourne un composant pour l'affichage latéral hors sélection (ex: légende, global config)
+ */
 export function getDomainPanel(domain: string, context: 'EMPTY_SELECTION') {
   return REGISTRY[domain]?.panels[context] || undefined;
 }
 
+/**
+ * Retourne le composant de rapport final pour le mode "Bilan"
+ */
 export function getDomainReport(domain: string) {
   return REGISTRY[domain]?.reports['SUMMARY'] || undefined;
 }
 
-// Helper pour React Flow (génère l'objet nodeTypes complet)
+/**
+ * Helper pour React Flow (génère l'objet nodeTypes complet dynamiquement)
+ */
 export function getFlowNodeTypes(domain: string, defaultTypes: any) {
   const customTypes = REGISTRY[domain]?.nodes || {};
   return { ...defaultTypes, ...customTypes };

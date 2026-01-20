@@ -17,22 +17,28 @@ export default async function EditPostPage(props: {
   // 1. Résolution des paramètres (Next.js 15)
   const { id, locale } = await props.params;
 
-  // 2. Récupération parallèle du post et de la liste globale des tags
-  // On récupère tous les tags pour permettre l'auto-complétion dans le formulaire client
-  const [post, allPostsWithTags] = await Promise.all([
+  // 2. Récupération parallèle : Post + Tags + Tutoriels
+  const [post, allPostsWithTags, allTutorials] = await Promise.all([
+    // A. L'article courant
     db.post.findUnique({ 
       where: { id },
       include: { author: true }
     }),
+    // B. Tous les tags pour l'autocomplétion
     db.post.findMany({
       select: { tags: true }
+    }),
+    // C. Tous les tutoriels pour le sélecteur
+    db.tutorial.findMany({
+        orderBy: { title: 'asc' },
+        select: { id: true, title: true, language: true }
     })
   ]);
 
   // 3. Gestion du cas "non trouvé"
   if (!post) notFound();
 
-  // 4. Extraction et dédoublonnage des tags existants pour le composant client
+  // 4. Extraction et dédoublonnage des tags existants
   const uniqueTags = Array.from(
     new Set(
       allPostsWithTags
@@ -42,10 +48,16 @@ export default async function EditPostPage(props: {
     )
   ).sort();
 
+  // 5. Filtrage des tutoriels pertinents (Même langue que l'article)
+  // Si l'article n'a pas de langue définie (vieux posts), on affiche tout par précaution.
+  const relevantTutorials = allTutorials.filter(t => 
+    post.language ? t.language === post.language : true
+  );
+
   return (
     <div className="min-h-screen bg-slate-50/50 flex flex-col text-slate-900">
       
-      {/* 1. HEADER DE NAVIGATION (Stable / Serveur) */}
+      {/* 1. HEADER DE NAVIGATION */}
       <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30 px-8 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-6">
           <Link 
@@ -80,19 +92,16 @@ export default async function EditPostPage(props: {
         </div>
       </header>
 
-      {/* 2. ESPACE DE TRAVAIL ÉDITEUR (Client Side) */}
+      {/* 2. ESPACE DE TRAVAIL ÉDITEUR */}
       <main className="flex-1 p-8">
-        {/* 
-          On passe 'existingTags' au formulaire pour permettre 
-          la sélection rapide des thématiques déjà utilisées.
-        */}
         <EditPostForm 
             post={post} 
             existingTags={uniqueTags} 
+            tutorials={relevantTutorials} // <--- Injection de la liste des tutos
         />
       </main>
 
-      {/* 3. FOOTER INFOS (Serveur) */}
+      {/* 3. FOOTER INFOS */}
       <footer className="max-w-[1600px] mx-auto w-full p-10 border-t border-slate-200/60 flex flex-col md:flex-row justify-between items-center gap-6">
          <div className="flex items-center gap-3 text-slate-400">
             <FileText size={16} />

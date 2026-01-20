@@ -19,5 +19,14 @@
   },
   "marketingPage": {
     "title": "Build the future of water treatment"
+  },
+  "dashboard": {
+    "title": "My Projects",
+    "subtitle": "Industrial digital twin management cockpit.",
+    "searchPlaceholder": "Search project by name, client or domain...",
+    "advancedFilters": "Advanced filters",
+    "emptyTitle": "No active projects",
+    "emptyDesc": "Start by initializing a new project using the button above.",
+    "unauthorized": "Unauthorized access. Please log in."
   }
 }

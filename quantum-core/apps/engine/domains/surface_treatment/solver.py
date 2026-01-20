@@ -1,164 +1,138 @@
-# apps/engine/domains/surface_treatment/solver.py
 import numpy as np
 import logging
+import json
+import asyncio
 
-logger = logging.getLogger("solver")
+logger = logging.getLogger("st_solver")
 
 async def run_surface_simulation_stream(nodes, edges, sequences, library, project_settings):
     """
-    Solveur complet : Hydraulique (Cascade) + Chimie (Matricielle)
+    Advanced Surface Treatment Solver
+    Handles: 24/7 Evaporation, Multi-Sequence Drag-out, Auto-Sprays, Matrix resolution.
     """
+    yield json.dumps({"type": "log", "message": "Initialisation du moteur physique...", "progress": 5}) + "\n"
     
-    # --- 1. PRÉPARATION DES DONNÉES ---
     node_map = {n['id']: i for i, n in enumerate(nodes)}
-    node_dict = {n['id']: n for n in nodes}
     N = len(nodes)
     
-    # Structure pour stocker les résultats
+    # 1. TEMPORAL SETTINGS
+    # Normalized to weekly basis to handle the 168h vs Working Hours paradox
+    hours_day = float(project_settings.get('hoursPerDay', 8))
+    days_week = float(project_settings.get('daysPerWeek', 5))
+    working_hours_week = hours_day * days_week
+    # Ratio to convert 24/7 continuous loss to an equivalent hourly rate during production
+    time_ratio = 168.0 / working_hours_week if working_hours_week > 0 else 0
+
     results = {n['id']: {
-        "flow": 0.0,           # Débit d'eau traversant (L/h)
-        "concentrations": {},  # Concentration par produit (g/L)
-        "water_makeup": 0.0,   # Appoint eau requis
+        "flow": 0.0,
+        "concentrations": {},
+        "evaporation": 0.0,
+        "water_makeup": 0.0,
         "warnings": []
     } for n in nodes}
 
-    # Calcul des Drag-out (Entraînement par les pièces)
-    # drag_outs[source_id][target_id] = volume en L/h
+    # 2. LOGISTICS: SUMMING ALL SEQUENCES
     drag_outs = np.zeros((N, N))
-    
     for seq in sequences:
         props = seq.get('properties', {})
-        # Q_drag (L/h) = Cadence (u/h) * Surface (m²/u) * Spécifique (L/m²)
-        cadence = float(props.get('cadence', 0))
-        surface = float(props.get('surfacePerPart', 1))
-        spec = float(props.get('dragOutSpecific', 0.1))
-        q_drag_seq = cadence * surface * spec
-        
+        # Hourly drag-out for this sequence
+        q_d = float(props.get('cadence', 0)) * float(props.get('surfacePerPart', 0)) * float(props.get('dragOutSpecific', 0.1))
         steps = seq.get('steps', [])
         for i in range(len(steps) - 1):
-            src_idx = node_map.get(steps[i])
-            dst_idx = node_map.get(steps[i+1])
-            if src_idx is not None and dst_idx is not None:
-                drag_outs[src_idx, dst_idx] += q_drag_seq
+            src, dst = node_map.get(steps[i]), node_map.get(steps[i+1])
+            if src is not None and dst is not None:
+                drag_outs[src, dst] += q_d
 
-    # --- 2. RÉSOLUTION HYDRAULIQUE (CASCADES) ---
-    # On doit déterminer Q_water pour chaque cuve.
-    # C'est un graphe de flux d'eau. On propage l'eau des sources vers les drains.
+    # 3. HYDRAULICS: EVAPORATION & CASCADES
+    water_flows = np.zeros((N, N))
     
-    # On initialise les débits connus (Eau Neuve)
-    water_flows = np.zeros((N, N)) # water_flows[src][dst]
+    # Calculate Evaporation first
+    for n in nodes:
+        p = n['properties']
+        if 'length' in p and 'width' in p:
+            area = (float(p['length']) * float(p['width'])) / 1_000_000 # m2
+            t_bath = float(p.get('temp', 20))
+            t_workshop = float(project_settings.get('workshopTemp', 20))
+            
+            # Simple Evaporation Model (L/h per 168h)
+            evap_base = area * (0.02 * (t_bath - t_workshop))
+            if p.get('agitation') == 'AIR': evap_base *= 1.5
+            if p.get('hasCover'): evap_base *= 0.1 # 90% reduction
+            
+            # Continuous loss (L/h)
+            q_evap_cont = max(0, evap_base)
+            results[n['id']]['evaporation'] = q_evap_cont
+            
+            # Effective loss to compensate during Working Hours
+            q_evap_eff = q_evap_cont * time_ratio
+            
+            # Logic: Auto-Spray or Manual top-up
+            if n['type'] == 'PROCESS_BATH' and p.get('hasSpray'):
+                src_id = p.get('spraySourceId')
+                if src_id in node_map:
+                    water_flows[node_map[src_id], node_map[n['id']]] = q_evap_eff
     
-    # Passe 1 : Injection d'eau neuve (Source -> Tank)
-    for node in nodes:
-        props = node.get('properties', {})
-        if node['type'] == 'RINSE_TANK':
-            src_id = props.get('waterSourceId')
-            # Si la source est une "SOURCE" (pas un autre bac), c'est de l'injection directe
-            src_node = node_dict.get(src_id)
-            if src_node and src_node['type'] == 'SOURCE':
-                q_in = float(props.get('flowRate', 0))
-                idx_src = node_map[src_id]
-                idx_dst = node_map[node['id']]
-                water_flows[idx_src, idx_dst] += q_in
-                results[node['id']]['flow'] += q_in
+    # Resolve Rinse Cascades & Fresh Water
+    for n in nodes:
+        if n['type'] == 'RINSE_TANK':
+            p = n['properties']
+            src_id = p.get('waterSourceId')
+            if src_id and node_map.get(src_id) is not None:
+                src_node = next((x for x in nodes if x['id'] == src_id), None)
+                if src_node and src_node['type'] == 'SOURCE':
+                    water_flows[node_map[src_id], node_map[n['id']]] = float(p.get('flowRate', 0))
 
-    # Passe 2 : Propagation des cascades (Rinçage -> Rinçage ou Rinçage -> Bain)
-    # On utilise un algo itératif simple pour propager le flux
-    # (Attention aux boucles, ici on suppose un flux acyclique majoritaire)
-    for _ in range(N): # Suffisant pour propager sur N niveaux de cascade
+    # Stabilize Gravity Overflows
+    for _ in range(N):
         changed = False
-        for node in nodes:
-            idx = node_map[node['id']]
-            props = node.get('properties', {})
+        for n in nodes:
+            idx = node_map[n['id']]
+            q_in = sum(water_flows[:, idx])
+            q_evap_eff = results[n['id']]['evaporation'] * time_ratio
             
-            # Somme de toute l'eau entrant dans ce nœud (Venant de sources ou d'autres bacs)
-            q_water_in = sum(water_flows[:, idx])
-            
-            # Gestion Évaporation
-            # (Pour simplifier ici, on dit que l'eau sortante = eau entrante - evap)
-            # Dans la réalité, le niveau baisse et on compense, donc Q_out = Q_in si débordement.
-            # Supposons ici Q_out = Q_in pour le flux hydraulique de surverse
-            
-            target_id = props.get('overflowTargetId')
+            # Q_overflow = Inlets - Evaporation (Simplified)
+            q_out = max(0, q_in - q_evap_eff)
+            target_id = n['properties'].get('overflowTargetId')
             if target_id and target_id in node_map:
-                target_idx = node_map[target_id]
-                
-                # Si le flux calculé est différent de ce qu'on a déjà, on met à jour
-                if water_flows[idx, target_idx] != q_water_in:
-                    water_flows[idx, target_idx] = q_water_in
-                    results[target_id]['flow'] = q_water_in # Mise à jour du débit traversant la cible
+                t_idx = node_map[target_id]
+                if abs(water_flows[idx, t_idx] - q_out) > 1e-6:
+                    water_flows[idx, t_idx] = q_out
                     changed = True
-        
         if not changed: break
 
-    # --- 3. RÉSOLUTION CHIMIQUE (MATRICIELLE) ---
-    # Bilan Masse : Accumulation = Entrée - Sortie + Réaction
-    # À l'équilibre : Entrée = Sortie
-    # Entrée i = (DragIn * C_prev) + (WaterIn * C_water_src) + Ajout_Chimique
-    # Sortie i = (DragOut * C_i) + (WaterOut * C_i)
+    # 4. CHEMISTRY: IONIC BALANCE (Ax = b)
+    yield json.dumps({"type": "log", "message": "Calcul des bilans ioniques...", "progress": 60}) + "\n"
     
-    # On identifie tous les produits chimiques uniques utilisés
-    chem_ids = set()
-    for node in nodes:
-        for comp in node.get('properties', {}).get('components', []):
-            if comp.get('chemId'): chem_ids.add(comp['chemId'])
-            
-    # On résout une matrice par produit chimique
+    chem_ids = {c['chemId'] for n in nodes for c in n['properties'].get('components', []) if c.get('chemId')}
+    
     for chem_id in chem_ids:
-        A = np.zeros((N, N))
-        B = np.zeros(N)
-        
-        for i, node in enumerate(nodes):
-            # Terme de sortie (Diagonale) : Ce qui part du noeud i
-            # Q_total_out = DragOut_Total + WaterOut_Total
-            q_drag_out_total = sum(drag_outs[i, :])
-            q_water_out_total = sum(water_flows[i, :])
+        A, b = np.zeros((N, N)), np.zeros(N)
+        for i, n in enumerate(nodes):
+            q_drag_out = sum(drag_outs[i, :])
+            q_water_out = sum(water_flows[i, :])
             
-            # Si c'est un bain mort/drain sans sortie, on évite la division par 0
-            if q_drag_out_total + q_water_out_total == 0:
-                A[i, i] = 1.0 # Concentration statique
-            else:
-                A[i, i] = q_drag_out_total + q_water_out_total
-
-            # Termes d'entrée (Hors diagonale) : Ce qui arrive de j vers i
-            # 1. Par Drag-out (j -> i)
-            for j in range(N):
-                if drag_outs[j, i] > 0:
-                    A[i, j] -= drag_outs[j, i]
-            
-            # 2. Par Eau (j -> i) (Dilution / Cascade inverse)
-            for j in range(N):
-                if water_flows[j, i] > 0:
-                    A[i, j] -= water_flows[j, i]
-
-            # 3. Source Chimique (Le bidon qu'on verse)
-            # Si c'est un PROCESS_BATH avec une consigne de concentration
-            props = node.get('properties', {})
-            target_conc = 0.0
-            is_active_bath = False
-            
-            if node['type'] == 'PROCESS_BATH':
-                for comp in props.get('components', []):
-                    if comp.get('chemId') == chem_id:
-                        target_conc = float(comp.get('concentration', 0))
-                        is_active_bath = True
-                        break
-            
-            if is_active_bath:
-                # C'est une condition limite de Dirichlet : C_i = Target
-                # On écrase la ligne de la matrice pour forcer la valeur
-                A[i, :] = 0
+            if n['type'] == 'PROCESS_BATH':
+                # Dirichlet Condition: Fixed concentration
+                target = next((c['concentration'] for c in n['properties'].get('components', []) if c.get('chemId') == chem_id), 0)
                 A[i, i] = 1.0
-                B[i] = target_conc
+                b[i] = target
+            else:
+                # Equilibrium: sum(In) = sum(Out)
+                A[i, i] = max(q_drag_out + q_water_out, 1e-9)
+                for j in range(N):
+                    if drag_outs[j, i] > 0: A[i, j] -= drag_outs[j, i]
+                    if water_flows[j, i] > 0: A[i, j] -= water_flows[j, i]
 
-        # Résolution Ax = B
         try:
-            C = np.linalg.solve(A, B)
-            # Stockage des résultats
-            for i, val in enumerate(C):
-                if val > 1e-6: # On ignore les traces infinitésimales
-                    results[nodes[i]['id']]['concentrations'][chem_id] = round(float(val), 4)
+            x = np.linalg.solve(A, b)
+            for i, val in enumerate(x):
+                if val > 1e-5: results[nodes[i]['id']]['concentrations'][chem_id] = round(float(val), 4)
         except np.linalg.LinAlgError:
-            results[nodes[0]['id']]['warnings'].append(f"Erreur convergence pour {chem_id}")
+            results[nodes[0]['id']]['warnings'].append(f"Erreur convergence: {chem_id}")
 
-    return {"status": "success", "node_details": results}
+    # Map hydraulics back to results
+    for n in nodes:
+        idx = node_map[n['id']]
+        results[n['id']]['flow'] = sum(water_flows[:, idx])
+
+    yield json.dumps({"type": "result", "data": {"status": "success", "node_details": results}}) + "\n"

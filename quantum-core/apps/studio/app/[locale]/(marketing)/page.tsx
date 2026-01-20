@@ -41,16 +41,25 @@ export default async function LandingPage(props: {
                     chaos.
                 </span>
             </h1>
-
-            <p className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto font-light leading-relaxed mb-12 animate-in fade-in slide-in-from-bottom-8 delay-200 duration-1000">
-                {isFr 
-                    ? "Remplacez vos tableurs fragiles par une plateforme déterministe. Générez des offres techniques 10x plus vite avec une précision absolue."
-                    : "Replace fragile spreadsheets with a deterministic platform. Generate technical proposals 10x faster with absolute precision."}
-            </p>
+                <p className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto font-light leading-relaxed mb-12 animate-in fade-in slide-in-from-bottom-8 delay-200 duration-1000">
+                    {isFr ? (
+                        <>
+                            Capitalisez sur votre expertise et libérez vos flux de travail.
+                            <br />
+                            L'ingénierie haute performance, version moderne.
+                        </>
+                    ) : (
+                        <>
+                            Capitalize on your expertise and streamline your workflows.
+                            <br />
+                            High-performance engineering, the modern way.
+                        </>
+                    )}
+                </p>
 
             <div className="flex flex-col items-center gap-6 animate-in fade-in slide-in-from-bottom-8 delay-300 duration-1000">
                 <LeadCapture />
-                <div className="flex items-center gap-8 text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+                <div className="flex items-center gap-8 text-[14px] font-mono text-zinc-500 uppercase tracking-widest">
                     <span className="flex items-center gap-2"><Check className="w-3 h-3" /> No Install</span>
                     <span className="flex items-center gap-2"><Check className="w-3 h-3" /> Cloud Native</span>
                     <span className="flex items-center gap-2"><Check className="w-3 h-3" /> Export PDF/XLS</span>
@@ -86,10 +95,10 @@ export default async function LandingPage(props: {
       {/* --- 2. TRUST BANNER: INDUSTRIES --- */}
       <section className="py-12 border-y border-white/5 bg-zinc-950/50">
         <div className="max-w-7xl mx-auto px-6">
-            <p className="text-center text-[10px] font-mono text-zinc-500 uppercase tracking-[0.3em] mb-8">
+            <p className="text-center text-[16px] font-mono text-zinc-500 uppercase tracking-[0.3em] mb-8">
                 {isFr ? "Conçu pour les secteurs de pointe" : "Built for mission-critical industries"}
             </p>
-            <div className="flex flex-wrap justify-center gap-8 md:gap-20 opacity-40 grayscale hover:grayscale-0 transition-all">
+            <div className="flex  flex-wrap justify-center gap-8 md:gap-20 opacity-40 grayscale hover:grayscale-0 transition-all">
                 <IndustryBrand name="Water Treatment" />
                 <IndustryBrand name="Green Hydrogen" />
                 <IndustryBrand name="Surface Finishing" />
@@ -107,11 +116,11 @@ export default async function LandingPage(props: {
                         {isFr ? "Passez de l'arithmétique à la physique." : "From Arithmetic to Physics."}
                     </h2>
                 </div>
-                <p className="text-zinc-500 max-w-sm text-sm leading-relaxed pb-2">
-                    {isFr 
-                        ? "Excel ne comprend pas la thermodynamique. Quantum Studio, oui. Détectez les erreurs avant qu'elles ne deviennent des pertes."
-                        : "Excel doesn't understand thermodynamics. Quantum Studio does. Catch errors before they become losses."}
-                </p>
+                    <p className="text-zinc-500 max-w-sm text-sm leading-relaxed pb-2">
+                        {isFr 
+                            ? "Centralisez vos données, votre knowledge management et votre expertise sur une plateforme unique. Concevez, calculez vos bilans matières et chiffrez vos systèmes complexes en un instant."
+                            : "Unify your data, knowledge management, and expertise in one place. Design, run material balances, and quote complex engineering systems instantly."}
+                    </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
@@ -125,13 +134,13 @@ export default async function LandingPage(props: {
                     colSpan="md:col-span-3"
                     icon={<Workflow className="text-purple-400" />}
                     title={isFr ? "Propagation en temps réel" : "Real-time Propagation"}
-                    desc={isFr ? "Changez un débit, voyez l'impact sur le CAPEX et les bilans thermiques instantanément." : "Change a flow rate, see the impact on CAPEX and thermal balances instantly."}
+                    desc={isFr ? "Changez un paramètre, voyez l'impact sur le CAPEX et les bilans de masse instantanément." : "Change a parameter, see the impact on CAPEX and mass balances instantly."}
                 />
                 <BentoCard 
                     colSpan="md:col-span-2"
                     icon={<Database className="text-emerald-400" />}
                     title={isFr ? "Bibliothèque Master" : "Master Library"}
-                    desc={isFr ? "Centralisez votre savoir-faire chimique et matériel." : "Centralize your chemical and equipment know-how."}
+                    desc={isFr ? "Centralisez votre savoir-faire." : "Centralize your know-how."}
                 />
                 <BentoCard 
                     colSpan="md:col-span-4"
@@ -197,7 +206,7 @@ export default async function LandingPage(props: {
         <div className="max-w-7xl mx-auto">
             {/* Same Footer as before... */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-6 pt-10 border-t border-white/5">
-                <p className="text-xs text-zinc-600 font-medium">© 2026 Quantum Core Engineering. Paris.</p>
+                <p className="text-xs text-zinc-600 font-medium">© 2026 Quantum Core.</p>
                 <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                     <span className="text-[10px] font-mono text-emerald-500 uppercase">System Stable</span>
@@ -213,7 +222,7 @@ export default async function LandingPage(props: {
 
 function IndustryBrand({ name }: { name: string }) {
     return (
-        <span className="text-xs font-bold font-mono tracking-[0.2em] text-zinc-400 hover:text-white cursor-default">
+        <span className="text-lg font-bold font-mono tracking-[0.2em] text-zinc-400 hover:text-white cursor-default">
             {name}
         </span>
     );
@@ -235,7 +244,7 @@ function WorkflowStep({ number, title, desc, icon, last }: any) {
     return (
         <div className="flex gap-8 md:gap-16 items-start group">
             <div className="flex flex-col items-center">
-                <div className="text-xs font-mono text-blue-500 font-black mb-4">({number})</div>
+                <div className="text-md font-mono text-blue-500 font-black mb-4">({number})</div>
                 {!last && <div className="w-px h-32 bg-gradient-to-b from-blue-500/50 to-transparent" />}
             </div>
             <div className="flex-1 space-y-4">

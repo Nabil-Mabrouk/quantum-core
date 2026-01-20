@@ -7,7 +7,7 @@
     "accessories": "Accessoires",
     "loading": "Chargement...",
     "error": "Erreur",
-    "dashboard": "Études",
+    "dashboard": "Projets",
     "settings": "Paramètres",
     "none": "Aucun",
     "add": "Ajouter",
@@ -19,5 +19,14 @@
   },
   "marketingPage": {
     "title": "Bâtir le futur du traitement de l'eau"
+  },
+  "dashboard": {
+    "title": "Mes Projets",
+    "subtitle": "Cockpit de gestion des jumeaux numériques industriels.",
+    "searchPlaceholder": "Rechercher une étude par nom, client ou domaine...",
+    "advancedFilters": "Filtres avancés",
+    "emptyTitle": "Aucune étude active",
+    "emptyDesc": "Commencez par initialiser une nouvelle étude en utilisant le bouton ci-dessus.",
+    "unauthorized": "Accès non autorisé. Veuillez vous connecter."
   }
 }

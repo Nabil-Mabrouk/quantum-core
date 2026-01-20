@@ -16,9 +16,9 @@ import { DynamicIcon } from '@/components/ui/dynamic-icon';
 import { ResizablePanel } from '@/components/ui/resizable-panel';
 import { CatalogSelector } from '@/components/layout/catalog-selector';
 import { NodeSelector } from '@/components/ui/node-selector';
-import { t, getDictionary } from '@/lib/i18n'; // Import i18n
-import { useParams } from 'next/navigation'; // 1. Import
-import { Locale } from '@/lib/i18n'; // 2. Import du type
+import { t, getDictionary } from '@/lib/i18n';
+import { useParams } from 'next/navigation';
+import { Locale } from '@/lib/i18n';
 
 // --- IMPORT DU REGISTRE ---
 import { 
@@ -45,9 +45,8 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
   const onNodesChange = useCanvasStore(state => state.onNodesChange);
   const onEdgesChange = useCanvasStore(state => state.onEdgesChange);
 
-  // i18n context (à lier à votre état global de langue plus tard)
-  const params = useParams(); // 3. Récupère les paramètres d'URL
-  const locale = (params.locale as Locale) || 'fr'; // 4. Dynamique !
+  const params = useParams();
+  const locale = (params.locale as Locale) || 'fr';
   const dict = getDictionary(locale);
 
   // 2. SORTIE PRÉCOCE
@@ -107,9 +106,11 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
   // --- MOTEUR DE RENDU GÉNÉRIQUE ---
   const renderField = (field: any, value: any, onChange: (val: any) => void) => {
     
-    // 1. CHAMP QUANTITÉ / NOMBRE
+    // 1. CHAMP QUANTITÉ / NOMBRE (Fix NaN issue)
     if (field.type === 'quantity' || field.type === 'number') {
-        const displayValue = value ?? field.default ?? 0;
+        const rawValue = value ?? field.default ?? 0;
+        const displayValue = Number.isNaN(rawValue) ? "" : rawValue;
+
         return (
             <div key={field.id} className="space-y-1">
                 <div className="flex justify-between items-center">
@@ -123,30 +124,39 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
                     type="number" 
                     step="any" 
                     value={displayValue} 
-                    onChange={(e) => onChange(parseFloat(e.target.value))} 
+                    onChange={(e) => {
+                        const val = e.target.value;
+                        onChange(val === "" ? 0 : parseFloat(val));
+                    }} 
                     className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono font-medium outline-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
                 />
             </div>
         );
     }
 
-    // 2. SÉLECTEUR DE BIBLIOTHÈQUE (Catalogues)
+    // 2. SÉLECTEUR DE BIBLIOTHÈQUE (Fix Chemical Name Display)
     if (field.type === 'library-selector') {
+        const currentId = typeof value === 'object' ? value?.id : value;
+        const currentName = typeof value === 'object' ? value?.name : "";
+
         return (
             <div key={field.id} className="space-y-1">
                 <label className="text-[9px] font-bold text-slate-400 uppercase">{t(field.label, locale)}</label>
                 <CatalogSelector 
                     category={field.query?.category || []} 
                     nodeId={elementId}
-                    onSelect={(item: any) => onChange(item.id)}
-                    label={value ? "Changer sélection" : "Choisir..."}
+                    value={currentId}
+                    label={currentName} 
+                    onSelect={(item: any) => {
+                        // On enregistre un objet au lieu d'une string pour garder le nom en mémoire
+                        onChange({ id: item.id, name: item.name });
+                    }}
                 />
-                {value && <p className="text-[10px] font-mono text-blue-600 mt-1 truncate opacity-70">ID: {value}</p>}
             </div>
         );
     }
 
-    // 3. SÉLECTEUR DE NOEUD (Liaisons Wireless)
+    // 3. SÉLECTEUR DE NOEUD
     if (field.type === 'node-selector') {
       return (
         <div key={field.id} className="space-y-1">
@@ -160,7 +170,7 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
       );
     }
 
-    // 4. COLLECTION (Tableau / Nesting d'accessoires)
+    // 4. COLLECTION (Tableaux / Chimie)
     if (field.type === 'collection') {
         const items = Array.isArray(value) ? value : (field.default || []);
         
@@ -185,7 +195,7 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
                     <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-2">
                         <List className="w-3 h-3" /> {t(field.label, locale)}
                     </label>
-                    <button onClick={addItem} className="flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-lg text-[9px] font-bold uppercase transition-all">
+                    <button onClick={addItem} type="button" className="flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-lg text-[9px] font-bold uppercase transition-all">
                         <Plus className="w-3 h-3" /> {dict.ui.add}
                     </button>
                 </div>
@@ -201,8 +211,9 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
                                 ))}
                             </div>
                             <button 
+                                type="button"
                                 onClick={() => removeItem(idx)}
-                                className="absolute -top-2 -right-2 bg-white text-slate-300 hover:text-red-500 border p-1 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
+                                className="absolute -top-2 -right-2 bg-white text-slate-300 hover:text-red-500 border p-1 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all"
                             >
                                 <Trash2 className="w-3 h-3" />
                             </button>
@@ -213,7 +224,7 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
         );
     }
 
-    // 5. CHAMPS STANDARDS
+    // 5. AUTRES CHAMPS
     switch (field.type) {
       case 'boolean': return (
         <div key={field.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-all">
@@ -243,7 +254,6 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
     }
   };
 
-  // --- RÉCUPÉRATION DES COMPOSANTS DOMAINE ---
   const CustomForm = isNode ? getDomainForm(config.id, elementType) : null;
   const CustomWidget = isNode ? getDomainWidget(config.id, elementType) : null;
 
@@ -265,7 +275,6 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
         <button 
           onClick={() => isNode ? onNodesChange([{ id: elementId, type: 'remove' }]) : onEdgesChange([{ id: elementId, type: 'remove' }])} 
           className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" 
-          title={dict.ui.delete}
         >
           <Trash2 className="w-4 h-4" />
         </button>

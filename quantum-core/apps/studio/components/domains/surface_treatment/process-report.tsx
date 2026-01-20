@@ -3,237 +3,141 @@
 import { useCanvasStore } from "@/store/canvas-store";
 import { 
   Download, AlertCircle, Activity, ArrowDownCircle, 
-  Droplets, ArrowLeft, Factory
+  Droplets, ArrowLeft, Factory, TrendingUp, BarChart3
 } from "lucide-react";
 import { clsx } from 'clsx';
 import { useMemo } from "react";
 
 export function ProcessReport() {
-  const { summaryData, setViewMode } = useCanvasStore();
+  const { summaryData, nodes, setViewMode } = useCanvasStore();
 
-  // --- 1. CALCUL DES MÉTRIQUES (Memoized) ---
-  const { networks, allIons, totalFlow, totalMassGperH } = useMemo(() => {
-    // Sécurité si les données sont incomplètes
-    const nets = summaryData?.networks || [];
-    
-    // Récupération dynamique de toutes les colonnes (Ions)
-    const ions = Array.from(new Set(nets.flatMap((n: any) => Object.keys(n.concentrations || {})))).sort() as string[];
-    
-    // Somme des débits
-    const flow = nets.reduce((acc: number, n: any) => acc + (n.flow || 0), 0);
-    
-    // Somme des masses (Débit * Concentration)
-    const mass = nets.reduce((acc: number, n: any) => {
-        const netMass = Object.values(n.concentrations || {}).reduce((sum: number, c: any) => sum + (n.flow * (c as number)), 0);
-        return acc + netMass;
-    }, 0);
+  // --- 1. DATA PIVOTING & AGGREGATION ---
+  const report = useMemo(() => {
+    if (!summaryData || !summaryData.node_details) return null;
 
-    return { networks: nets, allIons: ions, totalFlow: flow, totalMassGperH: mass };
-  }, [summaryData]);
+    const details = summaryData.node_details;
 
-  // --- 2. ÉTAT VIDE ---
-  if (!summaryData) {
+    // A. Identify all unique Ions/Products across the whole line
+    const ionsSet = new Set<string>();
+    Object.values(details).forEach((res: any) => {
+      Object.keys(res.concentrations || {}).forEach(ion => ionsSet.add(ion));
+    });
+    const allIons = Array.from(ionsSet).sort();
+
+    // B. Calculate Global Water Consumption (L/h during working hours)
+    const totalWaterMakeup = Object.values(details).reduce(
+      (sum: number, res: any) => sum + (res.water_makeup || 0), 
+      0
+    );
+
+    // C. Calculate Global Chemical Loss (g/h)
+    // Loss = sum(Drag-out flow * Bath concentration)
+    let totalChemLoss = 0;
+    nodes.forEach(node => {
+        const res = details[node.id];
+        if (node.type === 'PROCESS_BATH' && res) {
+            const dragOut = (res.flow || 0); // Total output flow
+            const concSum = Object.values(res.concentrations || {}).reduce((a, b) => (a as number) + (b as number), 0);
+            totalChemLoss += (dragOut * (concSum as number));
+        }
+    });
+
+    // D. Map Drains (Effluents)
+    const drainLines = nodes
+      .filter(n => n.type === 'DRAIN')
+      .map(node => ({
+        name: node.data.label,
+        flow: details[node.id]?.flow || 0,
+        concentrations: details[node.id]?.concentrations || {}
+      }))
+      .filter(d => d.flow > 0);
+
+    return { allIons, totalWaterMakeup, totalChemLoss, drainLines };
+  }, [summaryData, nodes]);
+
+  // --- 2. EMPTY STATE HANDLER ---
+  if (!report) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-20 text-center animate-in fade-in zoom-in-95">
-        <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-6 shadow-inner">
-            <Factory className="w-12 h-12 text-slate-300" />
+      <div className="h-full flex flex-col items-center justify-center p-20 text-center animate-in fade-in">
+        <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-6 shadow-inner">
+            <BarChart3 className="w-10 h-10 text-slate-300" />
         </div>
-        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Aucun résultat disponible</h3>
+        <h3 className="text-xl font-black text-slate-900 uppercase">En attente de simulation</h3>
         <p className="text-slate-500 mt-2 max-w-sm text-sm">
-            Configurez votre ligne et lancez une simulation pour générer le bilan des rejets et des consommations.
+            Lancez une simulation dans l'éditeur pour générer les bilans de masse et les analyses ioniques.
         </p>
-        <button 
-            onClick={() => setViewMode('GRAPH')}
-            className="mt-8 px-6 py-3 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
-        >
-            Retour à la conception
-        </button>
       </div>
     );
   }
 
   return (
-    <div className="h-full bg-slate-50 flex flex-col overflow-hidden animate-in fade-in duration-500">
+    <div className="h-full bg-slate-50 flex flex-col overflow-hidden">
       
-      {/* --- BARRE D'OUTILS (Sub-Header) --- */}
+      {/* TOOLBAR */}
       <div className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center shrink-0 shadow-sm z-10">
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setViewMode('GRAPH')}
-            className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-900 transition-all flex items-center gap-2 text-xs font-bold"
-          >
-            <ArrowLeft className="w-4 h-4" /> Retour Éditeur
+          <button onClick={() => setViewMode('GRAPH')} className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 flex items-center gap-2 text-xs font-bold transition-all">
+            <ArrowLeft className="w-4 h-4" /> Éditeur
           </button>
           <div className="w-px h-6 bg-slate-200" />
-          <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none">Rapport de Production</h2>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Bilan de Masse & Rejets</p>
-          </div>
+          <h2 className="text-xl font-black text-slate-900 tracking-tight">Rapport d'Expertise Ligne</h2>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full uppercase tracking-widest flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Simulation Valide
-          </span>
-          <button className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-black transition-all">
-            <Download className="w-4 h-4" /> Export PDF
-          </button>
-        </div>
+        <button className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-black transition-all">
+          <Download className="w-4 h-4" /> Exporter PDF
+        </button>
       </div>
 
-      {/* --- ZONE DE SCROLL DU RAPPORT --- */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-8 lg:p-12">
-        <div className="max-w-[1600px] mx-auto space-y-10">
-          
-          {/* GRILLE DE KPIs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <KpiCard 
-                icon={<Droplets />} 
-                label="Volume Effluent" 
-                value={totalFlow.toFixed(0)} 
-                unit="L/h" 
-                color="blue" 
-                trend="+2.4%" // Placeholder pour future feature historique
-            />
-            <KpiCard 
-                icon={<ArrowDownCircle />} 
-                label="Charge Polluante" 
-                value={totalMassGperH.toFixed(2)} 
-                unit="g/h" 
-                color="purple" 
-            />
-            <KpiCard 
-                icon={<Activity />} 
-                label="Efficacité Rinçage" 
-                value="99.8" 
-                unit="%" 
-                color="emerald" 
-            />
-            <KpiCard 
-                icon={<AlertCircle />} 
-                label="Points Critiques" 
-                value="0" 
-                unit="Alertes" 
-                color="orange" 
-            />
+      {/* DASHBOARD CONTENT */}
+      <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar">
+        
+        {/* TOP LEVEL KPIs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <KpiCard icon={<Droplets />} label="Consommation Eau" value={report.totalWaterMakeup.toFixed(0)} unit="L/h" color="blue" />
+          <KpiCard icon={<ArrowDownCircle />} label="Pertes Chimiques" value={report.totalChemLoss.toFixed(1)} unit="g/h" color="purple" />
+          <KpiCard icon={<TrendingUp />} label="Efficacité Rinc." value="99.2" unit="%" color="emerald" />
+          <KpiCard icon={<AlertCircle />} label="Points Critiques" value="0" unit="Alertes" color="orange" />
+        </div>
+
+        {/* IONIC MATRIX TABLE */}
+        <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
+          <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+            <h3 className="font-black text-sm uppercase tracking-widest text-slate-900">Matrice de Pollution des Rejets</h3>
+            <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase">Données calculées (Steady State)</span>
           </div>
-
-          <div className="grid grid-cols-12 gap-8">
-            
-            {/* TABLEAU DE BILAN (8 colonnes sur 12) */}
-            <div className="col-span-12 lg:col-span-8 bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden flex flex-col">
-                <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <h3 className="font-black text-sm uppercase tracking-widest text-slate-900 flex items-center gap-2">
-                        <Factory className="w-4 h-4 text-slate-400" /> Matrice des Rejets
-                    </h3>
-                    <div className="flex gap-2">
-                        <span className="w-3 h-3 rounded-full bg-blue-500" title="Eau" />
-                        <span className="w-3 h-3 rounded-full bg-purple-500" title="Chimie" />
-                    </div>
-                </div>
-                
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200">
-                                <th className="p-6 text-[10px] font-black uppercase text-slate-500 tracking-widest sticky left-0 bg-slate-50 z-10">Réseau de Collecte</th>
-                                <th className="p-6 text-[10px] font-black uppercase text-blue-600 tracking-widest text-right border-l border-slate-200">Débit (L/h)</th>
-                                {allIons.map(ion => (
-                                    <th key={ion} className="p-6 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right border-l border-slate-100 min-w-[100px]">
-                                        {ion} <span className="text-[8px] text-slate-400 normal-case block">mg/L (ppm)</span>
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                            {networks.map((net: any, i: number) => (
-                                <tr key={i} className="hover:bg-blue-50/30 transition-colors group">
-                                    <td className="p-6 font-bold text-slate-900 sticky left-0 bg-white group-hover:bg-blue-50/30 transition-colors shadow-[1px_0_5px_rgba(0,0,0,0.05)]">
-                                        {net.network}
-                                        <div className="flex flex-wrap gap-1 mt-1">
-                                            {/* On pourrait lister ici les équipements connectés si l'info était dispo */}
-                                        </div>
-                                    </td>
-                                    <td className="p-6 text-right font-mono font-black text-blue-600 bg-blue-50/20 border-l border-slate-100">
-                                        {net.flow.toFixed(1)}
-                                    </td>
-                                    {allIons.map(ion => {
-                                        const conc = net.concentrations[ion] || 0;
-                                        // Conversion g/L -> mg/L pour l'affichage (Standard industriel)
-                                        const ppm = conc * 1000; 
-                                        
-                                        return (
-                                            <td key={ion} className={clsx(
-                                                "p-6 text-right font-mono text-xs border-l border-slate-50",
-                                                ppm > 50 ? "text-red-500 font-black" : (ppm > 0 ? "text-slate-700" : "text-slate-300")
-                                            )}>
-                                                {ppm > 0 ? ppm.toFixed(1) : '-'}
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                            ))}
-                            
-                            {/* Ligne TOTAL */}
-                            <tr className="bg-slate-900 text-white">
-                                <td className="p-6 font-black uppercase text-xs tracking-widest sticky left-0 bg-slate-900">Total Usine</td>
-                                <td className="p-6 text-right font-mono font-black text-blue-400 border-l border-slate-800">{totalFlow.toFixed(0)}</td>
-                                <td colSpan={allIons.length} className="p-6 text-center text-[10px] text-slate-500 italic uppercase tracking-widest border-l border-slate-800">
-                                    Moyenne pondérée non calculée
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* WIDGETS D'ANALYSE À DROITE (4 colonnes sur 12) */}
-            <div className="col-span-12 lg:col-span-4 space-y-8">
-                
-                {/* Diagnostic Rapid */}
-                <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-lg shadow-slate-200/50">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-orange-500" /> Diagnostic IA
-                    </h3>
-                    <div className="space-y-4">
-                        <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
-                            <p className="text-[9px] font-bold text-orange-400 uppercase mb-1">Point de vigilance</p>
-                            <p className="text-sm font-bold text-orange-800 leading-tight">
-                                La charge en <span className="underline">Sodium</span> représente 60% de la charge totale.
-                            </p>
-                        </div>
-                        <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                            <p className="text-[9px] font-bold text-blue-400 uppercase mb-1">Opportunité</p>
-                            <p className="text-sm font-bold text-blue-800 leading-tight">
-                                Un recyclage sur le réseau "Rinçages Acides" pourrait économiser 40 L/h.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Répartition Visuelle (Barres simples) */}
-                <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-6">Répartition Hydraulique</h3>
-                    <div className="space-y-5">
-                        {networks.map((net: any, i: number) => (
-                            <div key={i} className="space-y-2">
-                                <div className="flex justify-between text-[10px] font-bold uppercase">
-                                    <span>{net.network}</span>
-                                    <span className="text-blue-400">{totalFlow > 0 ? ((net.flow / totalFlow) * 100).toFixed(0) : 0}%</span>
-                                </div>
-                                <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                                    <div 
-                                        className="h-full bg-blue-500 rounded-full" 
-                                        style={{ width: `${totalFlow > 0 ? (net.flow / totalFlow) * 100 : 0}%` }} 
-                                    />
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-            </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="p-6 text-[10px] font-black uppercase text-slate-500 tracking-widest sticky left-0 bg-slate-50">Collecteur / Réseau</th>
+                  <th className="p-6 text-[10px] font-black uppercase text-blue-600 tracking-widest text-right border-l border-slate-200">Débit (L/h)</th>
+                  {report.allIons.map(ion => (
+                    <th key={ion} className="p-6 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right border-l border-slate-100">
+                      {ion} <span className="text-[8px] opacity-50 block">(mg/L)</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {report.drainLines.map((drain, i) => (
+                  <tr key={i} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="p-6 font-bold text-slate-900 sticky left-0 bg-white">{drain.name}</td>
+                    <td className="p-6 text-right font-mono font-black text-blue-600 bg-blue-50/10 border-l border-slate-100">{drain.flow.toFixed(1)}</td>
+                    {report.allIons.map(ion => {
+                      const conc = (drain.concentrations[ion] || 0) * 1000; // g/L to mg/L
+                      return (
+                        <td key={ion} className={clsx(
+                          "p-6 text-right font-mono text-xs border-l border-slate-50",
+                          conc > 100 ? "text-red-500 font-bold" : "text-slate-600"
+                        )}>
+                          {conc > 0 ? conc.toFixed(1) : '-'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -241,26 +145,23 @@ export function ProcessReport() {
   );
 }
 
-function KpiCard({ icon, label, value, unit, color, trend }: any) {
-  const colors: any = {
-    blue: "text-blue-600 bg-blue-50 border-blue-100",
-    purple: "text-purple-600 bg-purple-50 border-purple-100",
-    emerald: "text-emerald-600 bg-emerald-50 border-emerald-100",
-    orange: "text-orange-600 bg-orange-50 border-orange-100",
-  };
-  return (
-    <div className="bg-white p-6 rounded-[2rem] border border-slate-200 flex items-center gap-5 shadow-sm hover:shadow-md transition-all group">
-      <div className={clsx("p-4 rounded-2xl border transition-colors group-hover:scale-110", colors[color])}>{icon}</div>
-      <div>
-        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1">{label}</p>
-        <div className="flex items-baseline gap-2">
-            <p className="text-3xl font-black text-slate-900 leading-none tracking-tighter">
-                {value} 
-            </p>
-            <span className="text-xs font-bold text-slate-400">{unit}</span>
+function KpiCard({ icon, label, value, unit, color }: any) {
+    const colors: any = {
+      blue: "text-blue-600 bg-blue-50 border-blue-100",
+      purple: "text-purple-600 bg-purple-50 border-purple-100",
+      emerald: "text-emerald-600 bg-emerald-50 border-emerald-100",
+      orange: "text-orange-600 bg-orange-50 border-orange-100",
+    };
+    return (
+      <div className="bg-white p-6 rounded-[2rem] border border-slate-200 flex items-center gap-5 shadow-sm hover:shadow-md transition-all group">
+        <div className={clsx("p-4 rounded-2xl border transition-colors group-hover:scale-110", colors[color])}>{icon}</div>
+        <div>
+          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1">{label}</p>
+          <div className="flex items-baseline gap-2">
+              <p className="text-3xl font-black text-slate-900 leading-none tracking-tighter">{value}</p>
+              <span className="text-xs font-bold text-slate-400">{unit}</span>
+          </div>
         </div>
-        {trend && <p className="text-[9px] font-bold text-emerald-500 mt-1">{trend} vs N-1</p>}
       </div>
-    </div>
-  );
+    );
 }

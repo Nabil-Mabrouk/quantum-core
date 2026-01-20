@@ -4,22 +4,21 @@ import { memo, useMemo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useCanvasStore } from '@/store/canvas-store';
 import { 
-  ArrowDown, ArrowRightLeft, ArrowUpRight, AlertCircle, 
-  Settings2, Activity, Zap, Flame, Eye
+  ArrowDown, ArrowRightLeft, ArrowUpRight, AlertTriangle, 
+  Settings2, Activity, Zap, Flame, Eye, Droplets
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getDomainConfig } from '@/lib/registry';
 import { DynamicIcon } from '@/components/ui/dynamic-icon';
-import { t } from '@/lib/i18n'; // Import du moteur de traduction
+import { t } from '@/lib/i18n';
 
 export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
   // 1. CONFIGURATION DU DOMAINE
   const config = getDomainConfig();
   const nodeType = data.type || 'DEFAULT'; 
   const nodeConfig = config.nodeTypes[nodeType];
-  const locale = 'fr'; // À terme, peut être récupéré via un hook contextuel
+  const locale = 'fr'; // À récupérer dynamiquement via un contexte si dispo
 
-  // Fallback si le type de nœud n'est pas trouvé dans le manifeste
   if (!nodeConfig) {
     return (
       <div className="p-4 bg-red-50 border-2 border-red-200 rounded-xl flex items-center gap-2 text-red-700">
@@ -39,17 +38,29 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
   
   const simResults = props.simulationResults || {};
   const warnings = simResults.warnings || [];
+  const concentrations = simResults.concentrations || {};
   
-  // 3. LOGIQUE DES ACCESSOIRES (NESTING / EMBARQUEMENT)
-  // On récupère la collection "accessories" définie dans le manifeste
-  const accessories = props.accessories || [];
+  // 3. LOGIQUE : SOMME IONIQUE (HEALTH BAR)
+  // On calcule la pollution totale pour la jauge visuelle
+  const totalIonicLoad = useMemo(() => {
+    return Object.values(concentrations).reduce((acc, val) => acc + (val as number), 0);
+  }, [concentrations]);
 
-  // 4. CHAMPS RÉSUMÉS (isSummary: true)
+  // Seuil d'alerte visuelle (ex: 50 g/L pour un rinçage est critique)
+  const POLLUTION_THRESHOLD = 50; 
+  const isPolluted = totalIonicLoad > 10; // Devient orange à partir de 10 g/L
+
+  // 4. CHAMPS RÉSUMÉS & ACCESSOIRES
+  const accessories = props.accessories || [];
   const summaryFields = useMemo(() => {
     return nodeConfig.fields.filter(f => (f as any).isSummary);
   }, [nodeConfig]);
 
-  // 5. LOGIQUE "WIRELESS" (Liaisons par propriétés)
+  // 5. ALERTES CRITIQUES
+  // Si le solveur renvoie une erreur (ex: bilan eau négatif)
+  const hasCritical = warnings.length > 0;
+
+  // 6. LIAISONS SANS FIL (Wireless)
   const wirelessLinks = useMemo(() => {
     const links = [];
     for (const [key, value] of Object.entries(props)) {
@@ -62,8 +73,8 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
 
                 if (key.toLowerCase().includes('dumping')) { color = "orange"; icon = ArrowDown; label = "Vidange"; }
                 else if (key.toLowerCase().includes('overflow')) { color = "emerald"; icon = ArrowUpRight; label = "Surverse"; }
-                else if (key.toLowerCase().includes('compensation')) { color = "blue"; icon = ArrowRightLeft; label = "Appoint"; }
-                else if (key.toLowerCase().includes('distillate')) { color = "blue"; icon = ArrowUpRight; label = "Distillat"; }
+                else if (key.toLowerCase().includes('spray')) { color = "blue"; icon = Droplets; label = "Spray"; }
+                else if (key.toLowerCase().includes('source')) { color = "blue"; icon = ArrowRightLeft; label = "Appoint"; }
 
                 links.push({ id: value, targetLabel: target.data.label, color, icon, label });
             }
@@ -72,37 +83,20 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
     return links;
   }, [props, allNodes]);
 
-  // 6. MÉTRIQUE PRINCIPALE (Simulation)
-  const primaryMetric = useMemo(() => {
-    if (simResults.concentrations) {
-        const entries = Object.entries(simResults.concentrations);
-        if (entries.length > 0) {
-            return { label: entries[0][0], value: Number(entries[0][1]), unit: "g/L" };
-        }
-    }
-    if (simResults.flow) return { label: "Débit", value: Number(simResults.flow), unit: "L/h" };
-    return null;
-  }, [simResults]);
-
-  const hasCritical = warnings.some((w: any) => w.severity === 'CRITICAL');
-
   return (
     <div 
       className={clsx(
         "min-w-[210px] max-w-[280px] rounded-xl border-2 transition-all duration-300 shadow-sm relative group font-sans bg-white",
         `border-${colorBase}-200`,
-        selected ? `ring-4 ring-${colorBase}-500/20 border-${colorBase}-500 shadow-xl scale-105 z-[100]` : "z-10 hover:border-blue-400",
-        hasCritical && !selected ? "border-red-500 animate-pulse" : ""
+        selected ? `ring-4 ring-blue-500/10 border-blue-500 shadow-xl scale-105 z-[100]` : "z-10 hover:border-blue-400",
+        hasCritical && !selected ? "border-red-500 animate-pulse shadow-red-100" : ""
       )}
     >
-      {/* BADGE D'ALERTE */}
-      {warnings.length > 0 && (
+      {/* BADGE D'ALERTE PHYSIQUE */}
+      {hasCritical && (
         <div className="absolute -top-3 -right-3 z-[110]">
-           <div className={clsx(
-             "w-7 h-7 rounded-full flex items-center justify-center border-2 border-white shadow-lg animate-bounce", 
-             hasCritical ? "bg-red-500 text-white" : "bg-amber-500 text-white"
-           )}>
-             <AlertCircle className="w-4 h-4" />
+           <div className="w-7 h-7 rounded-full bg-red-600 text-white flex items-center justify-center border-2 border-white shadow-lg animate-bounce">
+             <AlertTriangle className="w-4 h-4" />
            </div>
         </div>
       )}
@@ -110,7 +104,7 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
       {/* HEADER */}
       <div className={clsx(
           "px-3 py-2 border-b rounded-t-[9px] flex justify-between items-center transition-colors",
-          `bg-${colorBase}-50 border-${colorBase}-100 text-${colorBase}-700`
+          `bg-${colorBase}-50/50 border-${colorBase}-100 text-${colorBase}-700`
         )}>
         <div className="flex items-center gap-2">
           <DynamicIcon name={iconName} className="w-3.5 h-3.5" />
@@ -126,13 +120,13 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
             {data.label || "Élément sans nom"}
           </p>
           {props.catalogName && (
-            <p className="text-[9px] text-blue-500 mt-1 font-black uppercase tracking-tighter truncate">
+            <p className="text-[9px] text-blue-500 mt-1 font-black uppercase tracking-tighter truncate italic">
               {props.catalogName}
             </p>
           )}
         </div>
 
-        {/* CHAMPS RÉSUMÉS (Configurés via isSummary: true) */}
+        {/* CHAMPS RÉSUMÉS (Longueur, Largeur, Temp...) */}
         {summaryFields.length > 0 && (
             <div className="grid grid-cols-2 gap-2">
                 {summaryFields.map((field: any) => (
@@ -146,14 +140,13 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
             </div>
         )}
 
-        {/* --- NOUVEAU : AFFICHAGE DES ACCESSOIRES (NESTING) --- */}
+        {/* ACCESSOIRES (Pompes, Chauffages...) */}
         {accessories.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-50">
              {accessories.map((acc: any, i: number) => (
                <div 
                 key={i} 
                 className="flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded-md shadow-sm" 
-                title={`${acc.type}: ${acc.model || 'Standard'}`}
                >
                   <DynamicIcon 
                     name={acc.type === 'PUMP' ? 'Zap' : acc.type === 'HEATER' ? 'Flame' : 'Activity'} 
@@ -165,26 +158,37 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
           </div>
         )}
 
-        {/* JAUGE DE SIMULATION */}
-        {primaryMetric && (
+        {/* --- NOUVEAU : JAUGE DE POLLUTION (HEALTH BAR) --- */}
+        {totalIonicLoad > 0 && (
           <div className="mt-2 pt-2 border-t border-slate-100 animate-in fade-in slide-in-from-top-1">
             <div className="flex justify-between items-end mb-1">
-              <span className="text-[9px] font-bold text-slate-500 uppercase">{primaryMetric.label}</span>
+              <span className="text-[9px] font-bold text-slate-500 uppercase">Charge Ionique</span>
               <span className="text-xs font-black text-blue-600">
-                {primaryMetric.value.toFixed(2)} <span className="text-[9px] font-medium text-slate-400">{primaryMetric.unit}</span>
+                {totalIonicLoad.toFixed(2)} <span className="text-[9px] font-medium text-slate-400">g/L</span>
               </span>
             </div>
             <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-50 shadow-inner">
               <div 
-                className={clsx("h-full rounded-full transition-all duration-1000 ease-in-out", `bg-${colorBase}-500`)}
-                style={{ width: `${Math.min((primaryMetric.value / 50) * 100, 100)}%` }} 
+                className={clsx(
+                    "h-full rounded-full transition-all duration-1000 ease-in-out", 
+                    totalIonicLoad > POLLUTION_THRESHOLD ? "bg-red-500" : isPolluted ? "bg-orange-500" : "bg-blue-500"
+                )}
+                style={{ width: `${Math.min((totalIonicLoad / POLLUTION_THRESHOLD) * 100, 100)}%` }} 
               />
             </div>
           </div>
         )}
+
+        {/* KPI HYDRAULIQUE */}
+        {simResults.flow > 0 && (
+            <div className="flex items-center gap-2 text-slate-400 mt-1">
+                <Activity className="w-3 h-3" />
+                <span className="text-[9px] font-bold uppercase tracking-tight">Débit Traversant: {simResults.flow.toFixed(1)} L/h</span>
+            </div>
+        )}
       </div>
 
-      {/* FOOTER : LIENS WIRELESS */}
+      {/* FOOTER : LIENS WIRELESS (Surverse, Spray...) */}
       {wirelessLinks.length > 0 && (
         <div className="px-3 pb-3 flex flex-wrap gap-1.5 justify-center">
             {wirelessLinks.map((link, i) => (
