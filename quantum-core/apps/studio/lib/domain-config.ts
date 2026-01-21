@@ -28,7 +28,7 @@ export type FieldDefinition =
       unitFamily?: 'length' | 'flow' | 'temperature' | 'mass' | 'volume' | 'time' | 'concentration'; 
       default?: number; 
       timeProfile?: 'production' | 'heating' | 'maintenance' | '24/7'; 
-      isSummary?: boolean; // Indique si le champ apparaît sur la carte du graphe
+      isSummary?: boolean; // Indique si le champ apparaît sur la carte du graphe (SmartNode)
     }
   // 2. Champs Texte Simple
   | { 
@@ -79,6 +79,18 @@ export type FieldDefinition =
       default?: any[];
     };
 
+// --- NOUVEAU : STRUCTURE DE GROUPEMENT (TABS) ---
+
+/**
+ * Représente un groupe de champs qui sera affiché dans un onglet (Tab)
+ */
+export type FieldGroup = {
+  id: string;
+  label: I18nLabel;
+  iconName?: string; // Nom de l'icône Lucide pour l'onglet
+  fields: FieldDefinition[];
+};
+
 // --- SCHÉMAS D'OBJETS ---
 
 // Définition d'un Noeud (Équipement / Asset)
@@ -89,9 +101,9 @@ export type NodeSchema = {
   iconName: string;     
   color: string;        
   description?: I18nLabel; 
-  scope: NodeScope; // PROCESS (Squelette) ou UTILITY (Périphérique)
+  scope: NodeScope; 
   role?: 'SOURCE' | 'SINK' | 'PROCESS'; 
-  fields: FieldDefinition[]; 
+  groups: FieldGroup[]; // 🚩 Changé de fields[] vers groups[]
 };
 
 // Définition d'une Arête (Tuyauterie / Câblage)
@@ -99,7 +111,7 @@ export type EdgeSchema = {
   id: string;
   label: I18nLabel;
   color: string;
-  fields: FieldDefinition[];
+  groups: FieldGroup[]; // 🚩 Changé de fields[] vers groups[]
 };
 
 // Définition d'une Bibliothèque

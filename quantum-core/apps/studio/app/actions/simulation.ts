@@ -54,9 +54,9 @@ async function callEngine(endpoint: string, payload: any) {
     return { success: false, error: "Configuration serveur manquante (URL ou Secret)" };
   }
 
-  // SÉCURITÉ : Timeout de 15 secondes pour éviter le blocage UI
+  // SÉCURITÉ : Timeout augmenté à 30s pour les simulations complexes
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try {
     const response = await fetch(`${engineUrl}${endpoint}`, {
@@ -67,10 +67,10 @@ async function callEngine(endpoint: string, payload: any) {
       },
       body: JSON.stringify(payload),
       cache: 'no-store',
-      signal: controller.signal, // Lier le signal d'abort
+      signal: controller.signal,
     });
 
-    clearTimeout(timeoutId); // Annuler le timeout si réponse reçue
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorBody = await response.text();
@@ -82,7 +82,7 @@ async function callEngine(endpoint: string, payload: any) {
 
   } catch (error: any) {
     if (error.name === 'AbortError') {
-        return { success: false, error: "Le moteur de calcul ne répond pas (Timeout 15s)." };
+        return { success: false, error: "Le moteur de calcul a expiré (Timeout 30s)." };
     }
     return { success: false, error: "Incapable de joindre le moteur : " + error.message };
   }
@@ -99,6 +99,10 @@ type AppNodeWithData = {
   };
 };
 
+/**
+ * Transforme les propriétés de type 'node-selector' en liens logiques (Virtual Edges)
+ * pour que le solveur comprenne les raccordements sans fils tracés.
+ */
 function createVirtualEdges(nodes: AppNodeWithData[], domainManifest: any) {
   const virtualEdges: any[] = [];
   const nodeMap = new Map(nodes.map(node => [node.id, node]));
@@ -111,6 +115,7 @@ function createVirtualEdges(nodes: AppNodeWithData[], domainManifest: any) {
       if (field.type === 'node-selector') {
         const targetNodeId = sourceNode.data.properties[field.id];
         if (targetNodeId && nodeMap.has(targetNodeId)) {
+          // On utilise l'ID du champ (ex: spraySourceId) comme TYPE du lien virtuel
           const virtualEdgeType = field.id.toUpperCase(); 
           virtualEdges.push({
             id: `virtual-${sourceNode.id}-${targetNodeId}-${virtualEdgeType}`,
@@ -150,6 +155,10 @@ function deduplicateEdges(physicalEdges: any[], virtualEdges: any[]) {
   return finalEdges;
 }
 
+/**
+ * Formate la bibliothèque Prisma pour le solveur Python.
+ * Gère la hiérarchie Produit -> Réactif -> Ion.
+ */
 function formatLibraryForPython(rawLibrary: any[]) {
     return {
         referenceItems: rawLibrary.map(item => ({
@@ -157,22 +166,28 @@ function formatLibraryForPython(rawLibrary: any[]) {
             name: item.name,
             category: item.category,
             properties: item.properties,
-            composition: item.components?.map((c:any) => ({
+            // On extrait la composition récursivement
+            composition: item.components?.map((c: any) => ({
                 baseUnitId: c.childId,
-                coefficient: c.quantity
+                coefficient: c.quantity,
+                unit: c.unit
             })) || []
         })),
-        baseUnits: rawLibrary.filter(i => i.category === 'ION').map(i => ({
-            id: i.id,
-            properties: i.properties
-        }))
+        // Les Ions (catégorie ION) servent d'unités de base pour le calcul matriciel
+        baseUnits: rawLibrary
+            .filter(i => i.category === 'ION')
+            .map(i => ({
+                id: i.id,
+                name: i.name,
+                properties: i.properties // contient la valence et la masse molaire
+            }))
     };
 }
 
 // --- SERVER ACTIONS ---
 
 /**
- * 1. SIMULATION D'UN SEUL SYSTÈME
+ * 1. SIMULATION D'UN SEUL SYSTÈME (LIGNE)
  */
 export async function runSimulationAction(domain: string, systemId: string, nodes: any[], edges: any[], sequences: any[]) {
   const session = await auth();
@@ -192,12 +207,23 @@ export async function runSimulationAction(domain: string, systemId: string, node
   const virtualEdges = createVirtualEdges(formattedNodes, domainManifest);
   const processedEdges = deduplicateEdges(edges, virtualEdges);
 
+  // Construction des réglages projet (Horaires, etc.)
+  const projectSettings = {
+    hoursPerDay: systemWithStreams.project.hoursPerDay,
+    daysPerWeek: systemWithStreams.project.daysPerWeek,
+    weeksPerYear: systemWithStreams.project.weeksPerYear,
+    // On peut injecter ici des constantes d'environnement si besoin (ex: humidité par défaut)
+    workshopTemp: 20,
+    workshopHumidity: 60
+  };
+
   const payload = {
     domain,
     library: formatLibraryForPython(library),
+    project_settings: projectSettings,
     nodes: nodes.map(n => {
       const props = { ...n.data.properties };
-      // Injection des données du bus (Project Streams)
+      // Injection des données venant du Bus Projet (inputStreamId)
       if (n.data.properties?.inputStreamId) {
         const stream = projectStreams.find(s => s.id === n.data.properties.inputStreamId);
         if (stream) {
@@ -256,7 +282,7 @@ export async function generateProposalAction(domain: string, nodes: any[], edges
 }
 
 /**
- * 4. SIMULATION GLOBALE PROJET
+ * 4. SIMULATION GLOBALE PROJET (SYSTEM OF SYSTEMS)
  */
 export async function runGlobalProjectSimulation(projectId: string) {
   const session = await auth();
@@ -273,6 +299,13 @@ export async function runGlobalProjectSimulation(projectId: string) {
       projectId: project.id,
       domain: project.domain,
       library: formattedLibrary,
+      project_settings: {
+          hoursPerDay: project.hoursPerDay,
+          daysPerWeek: project.daysPerWeek,
+          weeksPerYear: project.weeksPerYear,
+          workshopTemp: 20,
+          workshopHumidity: 60
+      },
       systems: project.systems.map(sys => {
         const sysNodes: AppNodeWithData[] = sys.nodes.map(n => ({
           id: n.id,
@@ -316,6 +349,7 @@ export async function runGlobalProjectSimulation(projectId: string) {
 
     if (response.success && response.data.status === "success") {
       const streamResults = response.data.results.streams;
+      // Mise à jour atomique des flux dans la base de données
       await db.$transaction(
         Object.entries(streamResults).map(([streamId, value]) =>
           db.projectStream.update({
@@ -334,7 +368,7 @@ export async function runGlobalProjectSimulation(projectId: string) {
 }
 
 /**
- * 5. BILAN RÉSUMÉ (Legacy)
+ * 5. BILAN RÉSUMÉ (Point d'entrée pour le rapport final)
  */
 export async function runProjectSummaryAction(projectId: string) {
   const session = await auth();
@@ -361,7 +395,6 @@ export async function runProjectSummaryAction(projectId: string) {
 
       return {
         domain: project.domain,
-        library,
         nodes: graph.nodes.map((n: any) => ({
           id: n.id,
           type: n.data.type,
@@ -379,6 +412,11 @@ export async function runProjectSummaryAction(projectId: string) {
 
     return await callEngine('/project-summary', {
       domain: project.domain,
+      library: formatLibraryForPython(library),
+      project_settings: {
+          hoursPerDay: project.hoursPerDay,
+          daysPerWeek: project.daysPerWeek
+      },
       systems: systemsData
     });
   } catch (error: any) {

@@ -4,8 +4,13 @@ import { memo, useMemo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useCanvasStore } from '@/store/canvas-store';
 import { 
-  ArrowDown, ArrowRightLeft, ArrowUpRight, AlertTriangle, 
-  Settings2, Activity, Zap, Flame, Eye, Droplets
+  ArrowDown, 
+  ArrowRightLeft, 
+  ArrowUpRight, // ✅ Ajouté ici
+  AlertTriangle, 
+  Settings2, 
+  Activity, 
+  Droplets
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getDomainConfig } from '@/lib/registry';
@@ -17,12 +22,12 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
   const config = getDomainConfig();
   const nodeType = data.type || 'DEFAULT'; 
   const nodeConfig = config.nodeTypes[nodeType];
-  const locale = 'fr'; // À récupérer dynamiquement via un contexte si dispo
+  const locale = 'fr'; 
 
   if (!nodeConfig) {
     return (
       <div className="p-4 bg-red-50 border-2 border-red-200 rounded-xl flex items-center gap-2 text-red-700">
-        <AlertCircle className="w-5 h-5" />
+        <AlertTriangle className="w-5 h-5" />
         <span className="text-xs font-bold">Type inconnu: {nodeType}</span>
       </div>
     );
@@ -33,7 +38,7 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
   const colorBase = nodeConfig.color?.split('-')[0] || "slate"; 
 
   // 2. RÉCUPÉRATION DES DONNÉES DU STORE
-  const props = data.properties || {};
+  const props = (data.properties as any) || {};
   const allNodes = useCanvasStore(state => state.nodes);
   
   const simResults = props.simulationResults || {};
@@ -41,40 +46,41 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
   const concentrations = simResults.concentrations || {};
   
   // 3. LOGIQUE : SOMME IONIQUE (HEALTH BAR)
-  // On calcule la pollution totale pour la jauge visuelle
   const totalIonicLoad = useMemo(() => {
     return Object.values(concentrations).reduce((acc, val) => acc + (val as number), 0);
   }, [concentrations]);
 
-  // Seuil d'alerte visuelle (ex: 50 g/L pour un rinçage est critique)
   const POLLUTION_THRESHOLD = 50; 
-  const isPolluted = totalIonicLoad > 10; // Devient orange à partir de 10 g/L
+  const isPolluted = totalIonicLoad > 10; 
 
   // 4. CHAMPS RÉSUMÉS & ACCESSOIRES
   const accessories = props.accessories || [];
+
   const summaryFields = useMemo(() => {
-    return nodeConfig.fields.filter(f => (f as any).isSummary);
+    if (!nodeConfig.groups) return [];
+    const allFields = nodeConfig.groups.flatMap(group => group.fields);
+    return allFields.filter(f => (f as any).isSummary);
   }, [nodeConfig]);
 
   // 5. ALERTES CRITIQUES
-  // Si le solveur renvoie une erreur (ex: bilan eau négatif)
   const hasCritical = warnings.length > 0;
 
   // 6. LIAISONS SANS FIL (Wireless)
   const wirelessLinks = useMemo(() => {
     const links = [];
     for (const [key, value] of Object.entries(props)) {
-        if (typeof value === 'string' && (key.endsWith('NetworkId') || key.endsWith('SourceId') || key.endsWith('TargetId'))) {
+        if (typeof value === 'string' && (key.endsWith('NetworkId') || key.endsWith('SourceId') || key.endsWith('TargetId') || key.endsWith('Id'))) {
             const target = allNodes.find(n => n.id === value);
             if (target) {
                 let color = "slate";
                 let icon = ArrowRightLeft;
                 let label = "Lien";
 
-                if (key.toLowerCase().includes('dumping')) { color = "orange"; icon = ArrowDown; label = "Vidange"; }
-                else if (key.toLowerCase().includes('overflow')) { color = "emerald"; icon = ArrowUpRight; label = "Surverse"; }
-                else if (key.toLowerCase().includes('spray')) { color = "blue"; icon = Droplets; label = "Spray"; }
-                else if (key.toLowerCase().includes('source')) { color = "blue"; icon = ArrowRightLeft; label = "Appoint"; }
+                const k = key.toLowerCase();
+                if (k.includes('dumping')) { color = "orange"; icon = ArrowDown; label = "Vidange"; }
+                else if (k.includes('overflow')) { color = "emerald"; icon = ArrowUpRight; label = "Surverse"; }
+                else if (k.includes('spray')) { color = "blue"; icon = Droplets; label = "Spray"; }
+                else if (k.includes('source') || k.includes('makeup')) { color = "blue"; icon = ArrowRightLeft; label = "Appoint"; }
 
                 links.push({ id: value, targetLabel: target.data.label, color, icon, label });
             }
@@ -126,28 +132,25 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
           )}
         </div>
 
-        {/* CHAMPS RÉSUMÉS (Longueur, Largeur, Temp...) */}
+        {/* CHAMPS RÉSUMÉS */}
         {summaryFields.length > 0 && (
             <div className="grid grid-cols-2 gap-2">
                 {summaryFields.map((field: any) => (
                     <div key={field.id} className="flex flex-col bg-slate-50 p-2 rounded-lg border border-slate-100 min-w-0">
                         <span className="text-[7px] font-bold text-slate-400 uppercase truncate">{t(field.label, locale as any)}</span>
                         <span className="text-[10px] font-mono font-bold text-slate-700 truncate">
-                            {props[field.id] ?? '-'} <span className="text-[8px] text-slate-400">{field.unit}</span>
+                            {props[field.id] ?? '-'} <span className="text-[8px] text-slate-400">{(field as any).unit}</span>
                         </span>
                     </div>
                 ))}
             </div>
         )}
 
-        {/* ACCESSOIRES (Pompes, Chauffages...) */}
+        {/* ACCESSOIRES */}
         {accessories.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-50">
              {accessories.map((acc: any, i: number) => (
-               <div 
-                key={i} 
-                className="flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded-md shadow-sm" 
-               >
+               <div key={i} className="flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded-md shadow-sm">
                   <DynamicIcon 
                     name={acc.type === 'PUMP' ? 'Zap' : acc.type === 'HEATER' ? 'Flame' : 'Activity'} 
                     className="w-2.5 h-2.5 text-slate-400" 
@@ -158,7 +161,7 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
           </div>
         )}
 
-        {/* --- NOUVEAU : JAUGE DE POLLUTION (HEALTH BAR) --- */}
+        {/* JAUGE DE POLLUTION */}
         {totalIonicLoad > 0 && (
           <div className="mt-2 pt-2 border-t border-slate-100 animate-in fade-in slide-in-from-top-1">
             <div className="flex justify-between items-end mb-1">
@@ -183,12 +186,12 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
         {simResults.flow > 0 && (
             <div className="flex items-center gap-2 text-slate-400 mt-1">
                 <Activity className="w-3 h-3" />
-                <span className="text-[9px] font-bold uppercase tracking-tight">Débit Traversant: {simResults.flow.toFixed(1)} L/h</span>
+                <span className="text-[9px] font-bold uppercase tracking-tight">Débit: {simResults.flow.toFixed(1)} L/h</span>
             </div>
         )}
       </div>
 
-      {/* FOOTER : LIENS WIRELESS (Surverse, Spray...) */}
+      {/* FOOTER : LIENS WIRELESS */}
       {wirelessLinks.length > 0 && (
         <div className="px-3 pb-3 flex flex-wrap gap-1.5 justify-center">
             {wirelessLinks.map((link, i) => (
@@ -203,17 +206,9 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
         </div>
       )}
 
-      {/* PORTS DE CONNEXION REACT FLOW */}
-      <Handle 
-        type="target" 
-        position={Position.Left} 
-        className="w-2.5 h-2.5 !bg-slate-300 border-2 border-white transition-colors hover:!bg-blue-500 hover:scale-125" 
-      />
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        className="w-2.5 h-2.5 !bg-slate-300 border-2 border-white transition-colors hover:!bg-blue-500 hover:scale-125" 
-      />
+      {/* PORTS DE CONNEXION */}
+      <Handle type="target" position={Position.Left} className="w-2.5 h-2.5 !bg-slate-300 border-2 border-white transition-colors hover:!bg-blue-500 hover:scale-125" />
+      <Handle type="source" position={Position.Right} className="w-2.5 h-2.5 !bg-slate-300 border-2 border-white transition-colors hover:!bg-blue-500 hover:scale-125" />
     </div>
   );
 });

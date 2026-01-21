@@ -1,0 +1,112 @@
+[
+  {
+    "name": "Na+",
+    "category": "ION",
+    "symbol": "Na+",
+    "properties": { "valence": 1, "molarMass": 22.99 }
+  },
+  {
+    "name": "OH-",
+    "category": "ION",
+    "symbol": "OH-",
+    "properties": { "valence": -1, "molarMass": 17.01 }
+  },
+  {
+    "name": "H+",
+    "category": "ION",
+    "symbol": "H+",
+    "properties": { "valence": 1, "molarMass": 1.01 }
+  },
+  {
+    "name": "Cl-",
+    "category": "ION",
+    "symbol": "Cl-",
+    "properties": { "valence": -1, "molarMass": 35.45 }
+  },
+  {
+    "name": "Ni2+",
+    "category": "ION",
+    "symbol": "Ni2+",
+    "properties": { "valence": 2, "molarMass": 58.69 }
+  },
+  {
+    "name": "SO4 2-",
+    "category": "ION",
+    "symbol": "SO4--",
+    "properties": { "valence": -2, "molarMass": 96.06 }
+  },
+  {
+    "name": "Zn2+",
+    "category": "ION",
+    "symbol": "Zn2+",
+    "properties": { "valence": 2, "molarMass": 65.38 }
+  },
+  {
+    "name": "Sodium Hydroxide",
+    "category": "REAGENT",
+    "symbol": "NaOH",
+    "composition": [
+      { "childName": "Na+", "quantity": 0.575 },
+      { "childName": "OH-", "quantity": 0.425 }
+    ]
+  },
+  {
+    "name": "Hydrochloric Acid 100%",
+    "category": "REAGENT",
+    "symbol": "HCl",
+    "composition": [
+      { "childName": "H+", "quantity": 0.027 },
+      { "childName": "Cl-", "quantity": 0.973 }
+    ]
+  },
+  {
+    "name": "Nickel Sulfate",
+    "category": "REAGENT",
+    "symbol": "NiSO4",
+    "composition": [
+      { "childName": "Ni2+", "quantity": 0.379 },
+      { "childName": "SO4 2-", "quantity": 0.621 }
+    ]
+  },
+  {
+    "name": "Zinc Chloride",
+    "category": "REAGENT",
+    "symbol": "ZnCl2",
+    "composition": [
+      { "childName": "Zn2+", "quantity": 0.479 },
+      { "childName": "Cl-", "quantity": 0.521 }
+    ]
+  },
+  {
+    "name": "Alka-Clean 100 (Degreaser)",
+    "category": "COMMERCIAL_PRODUCT",
+    "properties": { "density": 1.2, "manufacturer": "QuantumChem" },
+    "composition": [
+      { "childName": "Sodium Hydroxide", "quantity": 450.0 }
+    ]
+  },
+  {
+    "name": "Pickle-Pro HCl 33%",
+    "category": "COMMERCIAL_PRODUCT",
+    "properties": { "density": 1.16 },
+    "composition": [
+      { "childName": "Hydrochloric Acid 100%", "quantity": 380.0 }
+    ]
+  },
+  {
+    "name": "Nickel-Max Liquid",
+    "category": "COMMERCIAL_PRODUCT",
+    "properties": { "density": 1.35 },
+    "composition": [
+      { "childName": "Nickel Sulfate", "quantity": 500.0 }
+    ]
+  },
+  {
+    "name": "Acid-Zinc B-42",
+    "category": "COMMERCIAL_PRODUCT",
+    "composition": [
+      { "childName": "Zinc Chloride", "quantity": 100.0 },
+      { "childName": "Sodium Hydroxide", "quantity": 10.0 }
+    ]
+  }
+]

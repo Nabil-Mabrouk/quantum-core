@@ -10,15 +10,18 @@ import {
   ToggleLeft, 
   FileText, 
   Plus,
-  Scale
+  Scale,
+  LayoutGrid
 } from 'lucide-react';
 import { DynamicIcon } from '@/components/ui/dynamic-icon';
 import { ResizablePanel } from '@/components/ui/resizable-panel';
 import { CatalogSelector } from '@/components/layout/catalog-selector';
 import { NodeSelector } from '@/components/ui/node-selector';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { t, getDictionary } from '@/lib/i18n';
 import { useParams } from 'next/navigation';
-import { Locale } from '@/lib/i18n';
+import { Locale, FieldGroup } from '@/lib/i18n';
+import { clsx } from 'clsx';
 
 // --- IMPORT DU REGISTRE ---
 import { 
@@ -32,7 +35,6 @@ interface PropertiesPanelProps {
 }
 
 export function PropertiesPanel({ config }: PropertiesPanelProps) {
-  // 1. DÉCLARATION DES HOOKS
   const viewMode = useCanvasStore(state => state.viewMode);
   const selectedNodeId = useCanvasStore(state => state.selectedNodeId);
   const selectedEdgeId = useCanvasStore(state => state.selectedEdgeId);
@@ -49,14 +51,11 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
   const locale = (params.locale as Locale) || 'fr';
   const dict = getDictionary(locale);
 
-  // 2. SORTIE PRÉCOCE
   if (viewMode === 'SUMMARY') return null;
 
-  // 3. LOGIQUE DE SÉLECTION
   const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
   const selectedEdge = selectedEdgeId ? edges.find(e => e.id === selectedEdgeId) : null;
 
-  // --- CAS VIDE ---
   if (!selectedNode && !selectedEdge) {
     const EmptySelectionComponent = getDomainPanel(config.id, 'EMPTY_SELECTION');
     return (
@@ -68,7 +67,7 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
                   <Settings2 className="w-8 h-8 text-slate-300" />
                 </div>
                 <p className="text-sm font-bold text-slate-400">
-                    {dict.ui.none || "Sélectionnez un élément"}
+                    {dict.ui?.none || "Sélectionnez un élément"}
                 </p>
              </div>
            )}
@@ -77,7 +76,6 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
     );
   }
 
-  // --- PRÉPARATION DES DONNÉES ---
   const isNode = !!selectedNode;
   const elementId = isNode ? selectedNode!.id : selectedEdge!.id;
   
@@ -103,14 +101,10 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
     else updateEdgeProperties(elementId, { [key]: value });
   };
 
-  // --- MOTEUR DE RENDU GÉNÉRIQUE ---
   const renderField = (field: any, value: any, onChange: (val: any) => void) => {
-    
-    // 1. CHAMP QUANTITÉ / NOMBRE (Fix NaN issue)
     if (field.type === 'quantity' || field.type === 'number') {
         const rawValue = value ?? field.default ?? 0;
         const displayValue = Number.isNaN(rawValue) ? "" : rawValue;
-
         return (
             <div key={field.id} className="space-y-1">
                 <div className="flex justify-between items-center">
@@ -120,74 +114,43 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
                     </label>
                     {field.unit && <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">{field.unit}</span>}
                 </div>
-                <input 
-                    type="number" 
-                    step="any" 
-                    value={displayValue} 
-                    onChange={(e) => {
-                        const val = e.target.value;
-                        onChange(val === "" ? 0 : parseFloat(val));
-                    }} 
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono font-medium outline-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
-                />
+                <input type="number" step="any" value={displayValue} onChange={(e) => onChange(e.target.value === "" ? 0 : parseFloat(e.target.value))} className="prop-input" />
             </div>
         );
     }
 
-    // 2. SÉLECTEUR DE BIBLIOTHÈQUE (Fix Chemical Name Display)
     if (field.type === 'library-selector') {
         const currentId = typeof value === 'object' ? value?.id : value;
         const currentName = typeof value === 'object' ? value?.name : "";
-
         return (
             <div key={field.id} className="space-y-1">
                 <label className="text-[9px] font-bold text-slate-400 uppercase">{t(field.label, locale)}</label>
-                <CatalogSelector 
-                    category={field.query?.category || []} 
-                    nodeId={elementId}
-                    value={currentId}
-                    label={currentName} 
-                    onSelect={(item: any) => {
-                        // On enregistre un objet au lieu d'une string pour garder le nom en mémoire
-                        onChange({ id: item.id, name: item.name });
-                    }}
-                />
+                <CatalogSelector category={field.query?.category || []} nodeId={elementId} value={currentId} label={currentName} onSelect={(item: any) => onChange({ id: item.id, name: item.name })} />
             </div>
         );
     }
 
-    // 3. SÉLECTEUR DE NOEUD
     if (field.type === 'node-selector') {
       return (
         <div key={field.id} className="space-y-1">
           <label className="text-[9px] font-bold text-slate-400 uppercase">{t(field.label, locale)}</label>
-          <NodeSelector
-            value={value}
-            onChange={onChange}
-            filter={field.filter}
-          />
+          <NodeSelector value={value} onChange={onChange} filter={field.filter} />
         </div>
       );
     }
 
-    // 4. COLLECTION (Tableaux / Chimie)
     if (field.type === 'collection') {
         const items = Array.isArray(value) ? value : (field.default || []);
-        
         const addItem = () => {
             const newItem = field.schema.reduce((acc: any, f: any) => ({ ...acc, [f.id]: f.default }), {});
             onChange([...items, newItem]);
         };
-
         const updateItem = (idx: number, k: string, v: any) => {
             const newItems = [...items];
             newItems[idx] = { ...newItems[idx], [k]: v };
             onChange(newItems);
         };
-
-        const removeItem = (idx: number) => {
-            onChange(items.filter((_: any, i: number) => i !== idx));
-        };
+        const removeItem = (idx: number) => onChange(items.filter((_: any, i: number) => i !== idx));
 
         return (
             <div key={field.id} className="pt-4 border-t border-slate-100">
@@ -196,27 +159,18 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
                         <List className="w-3 h-3" /> {t(field.label, locale)}
                     </label>
                     <button onClick={addItem} type="button" className="flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-lg text-[9px] font-bold uppercase transition-all">
-                        <Plus className="w-3 h-3" /> {dict.ui.add}
+                        <Plus className="w-3 h-3" /> {dict.ui?.add}
                     </button>
                 </div>
-                
                 <div className="space-y-2">
                     {items.map((item: any, idx: number) => (
                         <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-100 relative group hover:border-blue-200 transition-all">
                             <div className="grid gap-3">
                                 {field.schema.map((subField: any) => (
-                                    <div key={subField.id}>
-                                        {renderField(subField, item[subField.id], (val) => updateItem(idx, subField.id, val))}
-                                    </div>
+                                    <div key={subField.id}>{renderField(subField, item[subField.id], (val) => updateItem(idx, subField.id, val))}</div>
                                 ))}
                             </div>
-                            <button 
-                                type="button"
-                                onClick={() => removeItem(idx)}
-                                className="absolute -top-2 -right-2 bg-white text-slate-300 hover:text-red-500 border p-1 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all"
-                            >
-                                <Trash2 className="w-3 h-3" />
-                            </button>
+                            <button type="button" onClick={() => removeItem(idx)} className="absolute -top-2 -right-2 bg-white text-slate-300 hover:text-red-500 border p-1 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-3 h-3" /></button>
                         </div>
                     ))}
                 </div>
@@ -224,7 +178,6 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
         );
     }
 
-    // 5. AUTRES CHAMPS
     switch (field.type) {
       case 'boolean': return (
         <div key={field.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-all">
@@ -236,19 +189,15 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
         <div key={field.id} className="space-y-1">
           <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><List className="w-3 h-3" /> {t(field.label, locale)}</label>
           <select value={value || ""} onChange={(e) => onChange(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer">
-             <option value="">{dict.ui.none}</option>
-             {field.options?.map((opt: any) => (
-                <option key={opt.value || opt} value={opt.value || opt}>
-                  {t(opt.label || opt, locale)}
-                </option>
-             ))}
+             <option value="">{dict.ui?.none}</option>
+             {field.options?.map((opt: any) => (<option key={opt.value || opt} value={opt.value || opt}>{t(opt.label || opt, locale)}</option>))}
           </select>
         </div>
       );
       default: return (
         <div key={field.id} className="space-y-1">
           <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><Type className="w-3 h-3" /> {t(field.label, locale)}</label>
-          <input type="text" value={value || ""} onChange={(e) => onChange(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20" />
+          <input type="text" value={value || ""} onChange={(e) => onChange(e.target.value)} className="prop-input" />
         </div>
       );
     }
@@ -259,6 +208,7 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
 
   return (
     <ResizablePanel initialWidth={360}>
+      {/* 1. HEADER D'ÉLÉMENT FIXE */}
       <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-start shrink-0">
         <div>
           <div className={`flex items-center gap-2 mb-1 text-${schema?.color?.split('-')[0] || 'slate'}-500`}>
@@ -271,59 +221,72 @@ export function PropertiesPanel({ config }: PropertiesPanelProps) {
             {t(schema?.label, locale) || "Élément"}
           </h3>
         </div>
-        
-        <button 
-          onClick={() => isNode ? onNodesChange([{ id: elementId, type: 'remove' }]) : onEdgesChange([{ id: elementId, type: 'remove' }])} 
-          className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" 
-        >
+        <button onClick={() => isNode ? onNodesChange([{ id: elementId, type: 'remove' }]) : onEdgesChange([{ id: elementId, type: 'remove' }])} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-        {isNode && (
-          <div className="space-y-2">
-            <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1">
-              <Type className="w-3 h-3" /> Désignation
-            </label>
-            <input 
-              className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-blue-500 focus:bg-white transition-all"
-              value={label}
-              onChange={(e) => updateNodeLabel(elementId, e.target.value)}
-              placeholder="Ex: Cuve 1"
-            />
-          </div>
-        )}
-
-        {CustomWidget && (
-           <div className="border-b border-slate-100 pb-8">
-              <CustomWidget nodeId={elementId} />
-           </div>
-        )}
-
-        {CustomForm ? (
-            <CustomForm nodeId={elementId} />
-        ) : (
-            <div className="space-y-6">
-                <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
-                    <FileText className="w-3 h-3" /> Caractéristiques
-                </h4>
-                {schema?.fields && schema.fields.length > 0 ? (
-                    <div className="space-y-5">
-                        {schema.fields.map((field: any) => 
-                            renderField(
-                                field, 
-                                properties[field.id], 
-                                (val) => handlePropChange(field.id, val)
-                            )
-                        )}
-                    </div>
-                ) : (
-                    <div className="p-4 bg-slate-50 rounded-xl text-center">
-                        <p className="text-xs text-slate-400 italic">Aucune propriété configurable.</p>
-                    </div>
-                )}
+      {/* 2. ZONE DE CONTENU (SCROLLABLE) */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-white">
+        {/* Désignation et Widget (Toujours visibles en haut) */}
+        <div className="p-6 space-y-6 border-b border-slate-100 bg-white z-10 shrink-0">
+          {isNode && (
+            <div className="space-y-2">
+              <label className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                <Type className="w-3 h-3" /> Désignation
+              </label>
+              <input className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-blue-500 focus:bg-white transition-all" value={label} onChange={(e) => updateNodeLabel(elementId, e.target.value)} placeholder="Ex: Cuve 1" />
             </div>
+          )}
+          {CustomWidget && <CustomWidget nodeId={elementId} />}
+        </div>
+
+        {/* 3. SYSTÈME D'ONGLETS (TABS) */}
+        {schema?.groups && schema.groups.length > 0 ? (
+          <Tabs defaultValue={schema.groups[0].id} className="flex-1 flex flex-col min-h-0">
+            {/* Barre des onglets */}
+            <div className="px-4 bg-slate-50/50 border-b border-slate-100 shrink-0">
+              <TabsList className="bg-transparent h-12 w-full justify-start overflow-x-auto no-scrollbar gap-2 flex-nowrap">
+                {schema.groups.map((group: FieldGroup) => (
+                  <TabsTrigger 
+                    key={group.id} 
+                    value={group.id}
+                    className="data-[state=active]:bg-white data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 rounded-t-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest transition-all shrink-0"
+                  >
+                    <div className="flex items-center gap-2">
+                      {group.iconName && <DynamicIcon name={group.iconName} className="w-3.5 h-3.5" />}
+                      {t(group.label, locale)}
+                    </div>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+
+            {/* Contenu des onglets */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+              {schema.groups.map((group: FieldGroup) => (
+                <TabsContent key={group.id} value={group.id} className="p-6 m-0 space-y-6 outline-none">
+                  <div className="space-y-5">
+                    {group.fields.map((field: any) => 
+                      renderField(field, properties[field.id], (val) => handlePropChange(field.id, val))
+                    )}
+                  </div>
+                </TabsContent>
+              ))}
+            </div>
+          </Tabs>
+        ) : (
+          /* FALLBACK SI PAS DE GROUPES (ex: Edges) */
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+            {schema?.fields?.map((field: any) => 
+              renderField(field, properties[field.id], (val) => handlePropChange(field.id, val))
+            )}
+            {(!schema?.groups && !schema?.fields) && (
+              <div className="p-4 bg-slate-50 rounded-xl text-center">
+                <p className="text-xs text-slate-400 italic">Aucune propriété configurable.</p>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </ResizablePanel>

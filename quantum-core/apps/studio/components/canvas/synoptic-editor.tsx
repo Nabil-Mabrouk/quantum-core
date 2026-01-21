@@ -5,7 +5,6 @@ import { DynamicIcon } from '@/components/ui/dynamic-icon';
 import { useMemo } from 'react';
 import { 
   ArrowDown, 
-  AlertTriangle, 
   Map, 
   Layers, 
   Link as LinkIcon, 
@@ -14,11 +13,10 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getDomainConfig } from '@/lib/registry';
-import { t } from '@/lib/i18n'; // Helper de traduction
+import { t } from '@/lib/i18n'; 
 import {
   DndContext,
   closestCenter,
-  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -27,7 +25,6 @@ import {
 import {
   arrayMove,
   SortableContext,
-  sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   useSortable,
 } from '@dnd-kit/sortable';
@@ -62,16 +59,19 @@ function SortableNodeItem({ node, isSelected, isSequenceMode, locale = 'fr' }: {
   const nodeSchema = config.nodeTypes[nodeType];
   
   const colorBase = nodeSchema?.color?.split('-')[0] || "slate";
-  const props = node.data.properties || {};
+  const props = (node.data.properties as any) || {};
   const simResults = props.simulationResults || {};
   
-  // 1. Récupération des ACCESSOIRES (Nesting / Internals)
   const accessories = props.accessories || [];
 
-  // 2. Logique des LIAISONS SANS FIL (Utilities)
+  // 🚩 CORRECTION 1 : Extraction de tous les champs depuis les groupes pour les connexions sans fil
   const wirelessConnections = useMemo(() => {
-    if (!nodeSchema) return [];
-    return nodeSchema.fields
+    if (!nodeSchema || !nodeSchema.groups) return [];
+    
+    // On aplatit tous les champs de tous les groupes
+    const allFields = nodeSchema.groups.flatMap(g => g.fields);
+
+    return allFields
       .map(field => {
         if (field.type === 'node-selector') {
           const targetId = props[field.id];
@@ -86,8 +86,16 @@ function SortableNodeItem({ node, isSelected, isSequenceMode, locale = 'fr' }: {
         }
         return null;
       })
-      .filter(Boolean);
+      .filter((conn): conn is { id: string, label: string, targetName: string } => conn !== null);
   }, [node, allNodes, nodeSchema, props, locale]);
+
+  // 🚩 CORRECTION 2 : Extraction des champs "isSummary" depuis les groupes
+  const summaryFields = useMemo(() => {
+    if (!nodeSchema || !nodeSchema.groups) return [];
+    return nodeSchema.groups
+      .flatMap(g => g.fields)
+      .filter(f => (f as any).isSummary);
+  }, [nodeSchema]);
 
   return (
     <div ref={setNodeRef} style={style} className="w-full" {...(isSequenceMode ? { ...attributes, ...listeners } : {})}>
@@ -124,7 +132,7 @@ function SortableNodeItem({ node, isSelected, isSequenceMode, locale = 'fr' }: {
             
             {/* Métriques de résumé */}
             <div className="text-right space-y-1">
-                {nodeSchema?.fields.filter(f => (f as any).isSummary).map(f => (
+                {summaryFields.map(f => (
                     <div key={f.id} className="text-[10px] font-mono font-bold text-slate-500">
                         {props[f.id]} <span className="opacity-40 uppercase">{(f as any).unit}</span>
                     </div>
@@ -191,22 +199,18 @@ export function SynopticEditor() {
   const selectedNodeId = useCanvasStore(state => state.selectedNodeId);
 
   const config = getDomainConfig();
-  const locale = 'fr'; // À lier au store i18n plus tard
+  const locale = 'fr';
 
-  // FILTRAGE ET ORDONNANCEMENT SÉMANTIQUE
   const { orderedNodes, title, subTitle, activeSeq } = useMemo(() => {
     const _activeSeq = sequences.find(s => s.id === selectedSequenceId);
-    
-    // On ne garde que les noeuds dont le scope est 'PROCESS' pour la séquence
     const processNodes = nodes.filter(n => config.nodeTypes[n.type]?.scope === 'PROCESS');
 
     if (synopticMode === 'SEQUENCE' && _activeSeq) {
       const nodesInSequence = new Set(_activeSeq.steps);
       const ordered = _activeSeq.steps
         .map(stepId => nodes.find(n => n.id === stepId))
-        .filter(Boolean) as AppNode[];
+        .filter((n): n is AppNode => n !== undefined);
       
-      // On ajoute les noeuds PROCESS restants qui ne sont pas encore dans la gamme
       const remaining = processNodes.filter(n => !nodesInSequence.has(n.id));
 
       return { 
@@ -216,9 +220,8 @@ export function SynopticEditor() {
         activeSeq: _activeSeq 
       };
     } else {
-      // Mode Implantation : On trie tous les noeuds PROCESS par leur position X
       return {
-        orderedNodes: processNodes.sort((a, b) => a.position.x - b.position.x),
+        orderedNodes: [...processNodes].sort((a, b) => a.position.x - b.position.x),
         title: "Implantation Atelier",
         subTitle: "Positionnement géographique des équipements",
         activeSeq: null
@@ -246,7 +249,6 @@ export function SynopticEditor() {
       <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
         <div className="max-w-3xl mx-auto space-y-8">
           
-          {/* HEADER DE LA VUE */}
           <div className="text-center animate-in fade-in slide-in-from-top-2 mb-12">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-white border border-slate-200 rounded-full text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 shadow-sm">
                 {synopticMode === 'PHYSICAL' ? <Map className="w-3 h-3" /> : <Layers className="w-3 h-3 text-blue-500" />}
@@ -258,7 +260,6 @@ export function SynopticEditor() {
             <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-2">{subTitle}</p>
           </div>
 
-          {/* GRID DND */}
           {orderedNodes.length === 0 ? (
             <div className="text-center py-20 border-2 border-dashed border-slate-200 rounded-[3rem] bg-white/50 italic text-slate-400 text-sm">
               Aucun équipement de type "Process" défini dans le graphe.
