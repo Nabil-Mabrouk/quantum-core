@@ -12,7 +12,7 @@ export const createSequenceSlice: StateCreator<CanvasState, [], [], SequenceSlic
     const { systemId } = get();
     if (!systemId) return;
     const tempId = crypto.randomUUID();
-    const defaultProps = { cadence: 10, dragOutSpecific: 0.1 };
+    const defaultProps = { productionRate: 10, dragOutSpecific: 0.1 };
 
     set(state => ({
       sequences: [...state.sequences, { id: tempId, name, properties: defaultProps, steps: [] }]

@@ -1,82 +1,67 @@
 import { db } from '@repo/database';
-import { notFound } from 'next/navigation'; // <--- Import pour la gestion 404
-import { NodePalette } from '@/components/layout/node-palette';
-import { PropertiesPanel } from '@/components/layout/properties-panel';
+import { notFound } from 'next/navigation';
 import { ProjectInitializer } from '@/components/layout/project-initializer';
-import { Workspace } from '@/components/layout/workspace';
 import { SideNav } from '@/components/layout/shell/side-nav';
 import { UniversalHeader } from '@/components/layout/shell/universal-header';
-
+import { EditorClientLayout } from '@/components/layout/editor-client-layout'; // Import du nouveau wrapper
 import { loadGraph } from '@/app/actions/graph';
 import { getDomainConfig } from '@/lib/registry';
 
 export default async function EngineeringStudio(props: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string, locale: string }>;
   searchParams: Promise<{ systemId?: string }>;
 }) {  
+  // 1. Résolution des paramètres (Pattern Next.js 15)
   const { id: projectId } = await props.params;
   const { systemId: searchSystemId } = await props.searchParams;
 
-  // 1. Chargement sécurisé du projet
-  // On utilise findUnique au lieu de findUniqueOrThrow
+  // 2. Chargement du projet
   const project = await db.project.findUnique({ 
     where: { id: projectId },
     include: { systems: true }
   });
   
-  // 2. Si le projet n'existe pas, on affiche la page 404 de Next.js
-  if (!project) {
-    notFound();
-  }
+  if (!project) notFound();
 
   // 3. Détermination du système courant
-  // On prend soit l'ID dans l'URL, soit le premier système du projet
   const currentSystemId = searchSystemId || project.systems[0]?.id;
   
   if (!currentSystemId) {
     return (
         <div className="h-screen w-screen flex items-center justify-center bg-slate-50">
-            <div className="text-center space-y-4">
-                <p className="text-slate-500 font-bold">Aucun système trouvé pour cette étude.</p>
-            </div>
+            <p className="text-slate-500 font-bold">Aucun système trouvé pour cette étude.</p>
         </div>
     );
   }
 
-  // 4. Chargement de la configuration du domaine spécifique au projet
+  // 4. Configuration métier
   const config = getDomainConfig(project.domain);
 
-  // 5. Chargement des données du graphe et des séquences
+  // 5. Chargement initial des données (Graphe + Séquences)
+  // loadGraph a déjà été optimisé dans notre étape précédente
   const initialGraph = await loadGraph(currentSystemId);
-  const sequencesFromDb = await db.sequence.findMany({
-    where: { systemId: currentSystemId },
-    include: { steps: { orderBy: { order: 'asc' } } }
-  });
 
-  const initialSequences = sequencesFromDb.map(s => ({
-    id: s.id,
-    name: s.name,
-    properties: s.properties as Record<string, any>,
-    steps: s.steps.map(step => step.nodeId)
-  }));
+  // Mapping des séquences (On s'assure d'avoir un tableau propre)
+  const initialSequences = initialGraph.sequences || [];
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-900">
       
-      {/* BARRE LATÉRALE (Navigation Contextuelle) */}
+      {/* BARRE LATÉRALE (Statique au niveau layout) */}
       <SideNav projectId={projectId} systemId={currentSystemId} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         
-        {/* HEADER UNIFIÉ */}
+        {/* HEADER (Nécessite domainId pour son propre filtrage) */}
         <UniversalHeader 
           projectName={project.name}
           projectId={projectId}
+          domainId={project.domain} // 🚩 Requis par notre Header dynamique
           systems={project.systems}
           currentSystemId={currentSystemId}
         />
 
-        {/* INITIALISATION DU STORE CLIENT (Données du serveur vers Zustand) */}
+        {/* INITIALISATION DU STORE (Passerelle Serveur -> Client) */}
         <ProjectInitializer 
           projectId={project.id} 
           systemId={currentSystemId}
@@ -85,19 +70,11 @@ export default async function EngineeringStudio(props: {
           initialSequences={initialSequences}
         />
 
-        {/* ESPACE DE TRAVAIL ÉDITEUR */}
-        <main className="flex-1 flex overflow-hidden bg-slate-50">
-          
-          {/* Palette d'équipements (Draggable) */}
-          <NodePalette config={config} />
-          
-          {/* Zone centrale (Graphe / Synoptique / Bilan) */}
-          <Workspace config={config} />
+        {/* 🚩 LE WRAPPER CLIENT
+            C'est lui qui décidera d'afficher ou non les colonnes 
+            NodePalette et PropertiesPanel en fonction de viewMode */}
+        <EditorClientLayout config={config} />
 
-          {/* Panneau des propriétés à droite (Resizable) */}
-          <PropertiesPanel config={config} />
-          
-        </main>
       </div>
     </div>
   );

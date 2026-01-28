@@ -10,6 +10,15 @@ export type I18nLabel = string | { fr: string; en: string };
 // UTILITY: Réseau support (ex: Eau, Drain, Air)
 export type NodeScope = 'PROCESS' | 'UTILITY' | 'INFRASTRUCTURE';
 
+/**
+ * MODES DE VUE (Layouts)
+ * GRAPH: Éditeur de nœuds libre (type React Flow)
+ * SYNOPTIC: Vue verticale/linéaire ordonnée (Process Flow Diagram)
+ * SEQUENCES: Gestionnaire de gammes opératoires / séquencement
+ * SUMMARY: Bilan technique et rapport final
+ */
+export type ViewMode = 'GRAPH' | 'SYNOPTIC' | 'SEQUENCES' | 'SUMMARY';
+
 // Définition pour les requêtes vers la bibliothèque (Filtres)
 export type LibraryQuery = {
   category: string | string[]; // ex: "REAGENT" ou ["PUMP", "VALVE"]
@@ -103,7 +112,7 @@ export type NodeSchema = {
   description?: I18nLabel; 
   scope: NodeScope; 
   role?: 'SOURCE' | 'SINK' | 'PROCESS'; 
-  groups: FieldGroup[]; // 🚩 Changé de fields[] vers groups[]
+  groups: FieldGroup[]; 
 };
 
 // Définition d'une Arête (Tuyauterie / Câblage)
@@ -111,7 +120,7 @@ export type EdgeSchema = {
   id: string;
   label: I18nLabel;
   color: string;
-  groups: FieldGroup[]; // 🚩 Changé de fields[] vers groups[]
+  groups: FieldGroup[]; 
 };
 
 // Définition d'une Bibliothèque
@@ -123,12 +132,24 @@ export type LibraryDefinition = {
   categories: string[]; 
 };
 
+// --- CONFIGURATION UI (LAYOUTS) ---
+
+/**
+ * Définit le comportement de l'interface pour ce domaine particulier
+ */
+export type UIConfiguration = {
+  enabledViews: ViewMode[]; // Liste des vues pertinentes
+  defaultView: ViewMode;    // Vue chargée à l'ouverture du projet
+};
+
 // --- MANIFESTE GLOBAL ---
 
 export type DomainManifest = {
   id: string;
   name: I18nLabel;
+  ui: UIConfiguration; // 🚩 Nouveau : pilotage de l'interface
   libraries: LibraryDefinition[];
   nodeTypes: Record<string, NodeSchema>;
   edgeTypes: Record<string, EdgeSchema>;
+  sequenceFields?: FieldDefinition[]; 
 };

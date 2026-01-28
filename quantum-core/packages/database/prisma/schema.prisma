@@ -30,6 +30,7 @@ model User {
   projects       Project[] // Projets dont je suis propriétaire
   collaborations ProjectCollaborator[] // Projets partagés avec moi
   posts          Post[]
+  auditLogs      AuditLog[]
   createdAt      DateTime              @default(now())
 }
 
@@ -117,6 +118,9 @@ model Project {
   hoursPerDay   Float                 @default(8)
   daysPerWeek   Float                 @default(5)
   weeksPerYear  Float                 @default(47)
+
+  properties    Json                  @default("{}")
+  
   currency      String                @default("EUR")
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
@@ -318,11 +322,26 @@ model ProjectCollaborator {
 // --- AUDIT & ANALYTICS ---
 model AuditLog {
   id        String   @id @default(cuid())
-  domain    String
-  action    String // "SIMULATION_RUN", "OFFER_GENERATED", "LOGIN"
-  userId    String? @default(cuid())
-  details   Json?
   createdAt DateTime @default(now())
+  
+  // Qui ?
+  userId    String?  // Nullable (car l'attaquant n'est souvent pas connecté)
+  user      User?    @relation(fields: [userId], references: [id])
+  ipAddress String?  // CRUCIAL pour le bannissement (fail2ban)
+  userAgent String?  // Pour détecter les scripts/bots
+
+  // Quoi ?
+  level     String   @default("INFO") // "INFO", "WARN", "CRITICAL"
+  action    String   // "LOGIN_FAILED", "UNAUTHORIZED_ACCESS", "PROJECT_DELETE"
+  domain    String   // "AUTH", "SYSTEM", "BILLING"
+  
+  // Détails techniques (Parfait pour l'IA future)
+  // Ex: { "path": "/admin/users", "method": "POST", "error": "Invalid CSRF" }
+  metadata  Json?    @db.JsonB
+
+  @@index([userId])
+  @@index([action])
+  @@index([level])
 }
 
 model Tutorial {

@@ -5,8 +5,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { domain, projectId } = body;
 
-  const engineUrl = process.env.ENGINE_URL || 'http://127.0.0.1:8000';
-  const secret = process.env.INTERNAL_API_SECRET || 'super-secret-quantum-key-2026';
+  const engineUrl = process.env.ENGINE_URL;
+  const secret = process.env.INTERNAL_API_SECRET;
 
   try {
     // 1. CHARGEMENT DES DONNÉES (Bibliothèque + Projet)

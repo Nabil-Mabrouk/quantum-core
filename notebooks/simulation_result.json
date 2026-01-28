@@ -1,0 +1,83 @@
+{
+  "status": "success",
+  "node_details": {
+    "tank_1": {
+      "concentrations": {
+        "ion_na": 28.75,
+        "ion_oh": 20.0
+      },
+      "chemical_additions": {
+        "ion_na": 143.75,
+        "ion_oh": 100.0
+      },
+      "target_concentrations": {
+        "ion_na": 28.749999999999996,
+        "ion_oh": 20.0
+      },
+      "hydraulics": {
+        "in": 16.143829787234043,
+        "out": 5.0,
+        "evap": 2.4000000000000004,
+        "dump": 1.0638297872340425
+      }
+    },
+    "rinse_1": {
+      "concentrations": {
+        "ion_na": 28.75,
+        "ion_oh": 20.0
+      },
+      "chemical_additions": {},
+      "target_concentrations": {},
+      "hydraulics": {
+        "in": 5.0,
+        "out": 5.0,
+        "evap": 0,
+        "dump": 0
+      }
+    },
+    "rinse_2": {
+      "concentrations": {
+        "ion_na": 28.75,
+        "ion_oh": 20.0
+      },
+      "chemical_additions": {},
+      "target_concentrations": {},
+      "hydraulics": {
+        "in": 10.0,
+        "out": 10.0,
+        "evap": 0,
+        "dump": 0
+      }
+    },
+    "source_1": {
+      "concentrations": {},
+      "chemical_additions": {},
+      "target_concentrations": {},
+      "hydraulics": {
+        "in": 0.0,
+        "out": 16.143829787234043,
+        "evap": 0,
+        "dump": 0
+      }
+    },
+    "drain_1": {
+      "concentrations": {
+        "ion_na": 143750000000.0,
+        "ion_oh": 100000000000.0
+      },
+      "chemical_additions": {},
+      "target_concentrations": {},
+      "hydraulics": {
+        "in": 5.0,
+        "out": 0.0,
+        "evap": 0,
+        "dump": 0
+      }
+    }
+  },
+  "global_kpis": {
+    "total_water_consumption": 16.14,
+    "warnings_count": 0
+  },
+  "warnings": []
+}

@@ -5,20 +5,31 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { auth } from "@/auth";
 
+/**
+ * Interface étendue pour NextAuth
+ */
+interface ExtendedUser {
+  role?: string;
+  id?: string;
+}
+
 // --- SECURITY HELPER ---
 
 async function requireAdmin() {
   const session = await auth();
-  // @ts-ignore
-  if (session?.user?.role !== 'ADMIN') {
+  const user = session?.user as ExtendedUser;
+  
+  if (user?.role !== 'ADMIN') {
     throw new Error("Non autorisé: Accès administrateur requis.");
   }
+  return user;
 }
 
 // --- ACTIONS DE RÉCUPÉRATION ---
 
 export async function getLibrary(domain: string) {
-  const allItems = await db.libraryItem.findMany({
+  // Récupération optimisée avec tri
+  return await db.libraryItem.findMany({
     where: { domain },
     include: {
       components: {
@@ -27,8 +38,6 @@ export async function getLibrary(domain: string) {
     },
     orderBy: { name: 'asc' }
   });
-
-  return allItems;
 }
 
 // --- ACTIONS DE MODIFICATION ---
@@ -38,13 +47,13 @@ export async function upsertLibraryItem(domain: string, data: any) {
 
   const LibraryItemSchema = z.object({
     id: z.string().optional().nullable(),
-    name: z.string().min(1),
+    name: z.string().min(1, "Le nom est requis"),
     category: z.string(),
     symbol: z.string().optional().nullable(),
     properties: z.record(z.any()).default({}),
     composition: z.array(z.object({
       childId: z.string(),
-      quantity: z.number(),
+      quantity: z.number().positive(),
       unit: z.string().optional().nullable(),
     })).optional(),
   });
@@ -52,10 +61,10 @@ export async function upsertLibraryItem(domain: string, data: any) {
   const validated = LibraryItemSchema.parse(data);
   const { name, category, symbol, properties, composition } = validated;
 
-  return await db.$transaction(async (tx) => {
-    // 1. Upsert de l'item principal
+  const result = await db.$transaction(async (tx) => {
+    // 1. Upsert de l'item principal (Clé unique sur 'name' assurée par le schéma)
     const item = await tx.libraryItem.upsert({
-      where: { name: name },
+      where: { name },
       update: {
         category,
         symbol,
@@ -72,10 +81,9 @@ export async function upsertLibraryItem(domain: string, data: any) {
       }
     });
 
-    // 2. Mise à jour de la nomenclature (Composition)
+    // 2. Synchronisation de la composition (Delete + Create)
     if (composition !== undefined) {
       await tx.composition.deleteMany({ where: { parentId: item.id } });
-
       if (composition.length > 0) {
         await tx.composition.createMany({
           data: composition.map(c => ({
@@ -87,26 +95,28 @@ export async function upsertLibraryItem(domain: string, data: any) {
         });
       }
     }
-
-    revalidatePath('/library');
     return item;
   });
+
+  revalidatePath('/[locale]/library', 'page');
+  return result;
 }
 
 export async function deleteLibraryItem(id: string) {
   await requireAdmin();
 
+  // Empêcher la suppression si l'item est une dépendance
   const usageCount = await db.composition.count({ where: { childId: id } });
   if (usageCount > 0) {
-    throw new Error(`Cet élément est utilisé comme composant dans ${usageCount} autre(s) article(s). Supprimez les liens d'abord.`);
+    throw new Error(`Cet élément est utilisé dans ${usageCount} autre(s) composition(s).`);
   }
 
   await db.libraryItem.delete({ where: { id } });
-  revalidatePath('/library');
+  revalidatePath('/[locale]/library', 'page');
   return { success: true };
 }
 
-// --- LOGIQUE D'IMPORTATION JSON ---
+// --- LOGIQUE D'IMPORTATION JSON (OPTIMISÉE) ---
 
 export async function importLibraryAction(domain: string, jsonData: any) {
   await requireAdmin();
@@ -124,7 +134,6 @@ export async function importLibraryAction(domain: string, jsonData: any) {
   }));
 
   const validation = JSONImportSchema.safeParse(jsonData);
-  
   if (!validation.success) {
     return { success: false, error: "Format JSON invalide : " + validation.error.message };
   }
@@ -133,7 +142,8 @@ export async function importLibraryAction(domain: string, jsonData: any) {
 
   try {
     await db.$transaction(async (tx) => {
-      // PASSE 1 : Création/Update des Items
+      // ÉTAPE 1 : Création des items parents (Bulk possible si on gère les conflits)
+      // On utilise une boucle mais on évite les findUnique redondants
       for (const item of items) {
         await tx.libraryItem.upsert({
           where: { name: item.name },
@@ -153,53 +163,52 @@ export async function importLibraryAction(domain: string, jsonData: any) {
         });
       }
 
-      // PASSE 2 : Création des Liens récursifs
+      // ÉTAPE 2 : Reconstruction des liens (Composition)
+      // On récupère tous les IDs en une seule fois pour le mapping name -> id
+      const allItemsInDomain = await tx.libraryItem.findMany({
+        where: { domain },
+        select: { id: true, name: true }
+      });
+      const nameToIdMap = new Map(allItemsInDomain.map(i => [i.name, i.id]));
+
       for (const item of items) {
-        if (item.composition && item.composition.length > 0) {
-          const parent = await tx.libraryItem.findUnique({ where: { name: item.name } });
-          if (!parent) continue;
+        const parentId = nameToIdMap.get(item.name);
+        if (!parentId || !item.composition) continue;
 
-          await tx.composition.deleteMany({ where: { parentId: parent.id } });
+        await tx.composition.deleteMany({ where: { parentId } });
+        
+        const validCompositions = item.composition
+          .filter(c => nameToIdMap.has(c.childName))
+          .map(c => ({
+            parentId,
+            childId: nameToIdMap.get(c.childName)!,
+            quantity: c.quantity,
+            unit: c.unit
+          }));
 
-          for (const comp of item.composition) {
-            const child = await tx.libraryItem.findUnique({ where: { name: comp.childName } });
-            if (child) {
-              await tx.composition.create({
-                data: {
-                  parentId: parent.id,
-                  childId: child.id,
-                  quantity: comp.quantity,
-                  unit: comp.unit
-                }
-              });
-            }
-          }
+        if (validCompositions.length > 0) {
+          await tx.composition.createMany({ data: validCompositions });
         }
       }
-    }, { timeout: 30000 });
+    }, { timeout: 60000 }); // Augmentation du timeout pour les gros imports
 
-    revalidatePath('/library');
+    revalidatePath('/[locale]/library', 'page');
     return { success: true, count: items.length };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
 }
 
-// --- EXPORTATION (La fonction qui manquait) ---
+// --- EXPORTATION ---
 
-/**
- * Génère un dump JSON de la bibliothèque filtré par domaine et catégories
- */
 export async function exportLibraryData(domain: string, categories?: string[]) {
   await requireAdmin();
 
-  const whereCondition: any = { domain };
-  if (categories && categories.length > 0) {
-    whereCondition.category = { in: categories };
-  }
-
   const items = await db.libraryItem.findMany({
-    where: whereCondition,
+    where: { 
+      domain,
+      ...(categories && categories.length > 0 ? { category: { in: categories } } : {})
+    },
     include: {
       components: {
         include: { child: true }
@@ -208,7 +217,6 @@ export async function exportLibraryData(domain: string, categories?: string[]) {
     orderBy: { name: 'asc' }
   });
 
-  // Transformation en format compatible avec importLibraryAction
   return items.map(item => ({
     name: item.name,
     category: item.category,
@@ -222,38 +230,57 @@ export async function exportLibraryData(domain: string, categories?: string[]) {
   }));
 }
 
-// --- UTILITAIRES DE CALCUL ---
+// --- UTILITAIRES DE CALCUL (ALGORITHME OPTIMISÉ) ---
 
 /**
- * Aplatit récursivement la nomenclature (BOM) d'un item
- * Utile pour le solveur afin de connaître la masse totale de chaque ion/composant
+ * Aplatit récursivement la nomenclature (BOM) en minimisant les appels DB.
+ * Stratégie : Chargement de l'arbre de dépendance complet en une fois.
  */
 export async function getFlattenedComposition(itemId: string): Promise<Record<string, number>> {
+  // 1. On récupère d'abord l'item racine pour connaître son domaine
+  const root = await db.libraryItem.findUnique({ where: { id: itemId } });
+  if (!root) return {};
+
+  // 2. On charge TOUS les liens de composition du domaine pour construire le graphe en mémoire
+  // Cela évite le N+1 récursif en base de données.
+  const allLinks = await db.composition.findMany({
+    where: { parent: { domain: root.domain } },
+    include: { 
+      parent: { select: { id: true, name: true } },
+      child: { select: { id: true, name: true } }
+    }
+  });
+
+  const graph = new Map<string, { childId: string, name: string, qty: number }[]>();
+  const idToName = new Map<string, string>();
+
+  allLinks.forEach(link => {
+    const children = graph.get(link.parentId) || [];
+    children.push({ childId: link.childId, name: link.child.name, qty: link.quantity });
+    graph.set(link.parentId, children);
+    idToName.set(link.childId, link.child.name);
+  });
+
   const totals: Record<string, number> = {};
-  const MAX_DEPTH = 10; 
+  
+  // 3. Parcours DFS en mémoire (Ultra rapide)
+  function traverse(currentId: string, multiplier: number, path: Set<string>) {
+    if (path.has(currentId)) return; // Protection contre les cycles
+    
+    const children = graph.get(currentId);
+    if (!children || children.length === 0) {
+      const name = idToName.get(currentId) || root?.name || "Unknown";
+      totals[name] = (totals[name] || 0) + multiplier;
+      return;
+    }
 
-  async function resolve(currentId: string, multiplier: number, depth: number, path: Set<string>) {
-    if (depth > MAX_DEPTH || path.has(currentId)) return;
-
-    const item = await db.libraryItem.findUnique({
-      where: { id: currentId },
-      include: { components: true }
-    });
-
-    if (!item) return;
-
-    if (item.components.length === 0) {
-      // Élément atomique (Feuille)
-      totals[item.name] = (totals[item.name] || 0) + multiplier;
-    } else {
-      const newPath = new Set(path);
-      newPath.add(currentId);
-      for (const comp of item.components) {
-        await resolve(comp.childId, multiplier * comp.quantity, depth + 1, newPath);
-      }
+    const newPath = new Set(path);
+    newPath.add(currentId);
+    for (const child of children) {
+      traverse(child.childId, multiplier * child.qty, newPath);
     }
   }
 
-  await resolve(itemId, 1, 0, new Set());
+  traverse(itemId, 1, new Set());
   return totals;
 }

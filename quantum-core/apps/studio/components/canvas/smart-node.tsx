@@ -6,7 +6,7 @@ import { useCanvasStore } from '@/store/canvas-store';
 import { 
   ArrowDown, 
   ArrowRightLeft, 
-  ArrowUpRight, // ✅ Ajouté ici
+  ArrowUpRight, 
   AlertTriangle, 
   Settings2, 
   Activity, 
@@ -22,7 +22,7 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
   const config = getDomainConfig();
   const nodeType = data.type || 'DEFAULT'; 
   const nodeConfig = config.nodeTypes[nodeType];
-  const locale = 'fr'; 
+  const locale = 'fr'; // Utiliser la locale du contexte si disponible, 'fr' par défaut 
 
   if (!nodeConfig) {
     return (
@@ -59,7 +59,8 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
   const summaryFields = useMemo(() => {
     if (!nodeConfig.groups) return [];
     const allFields = nodeConfig.groups.flatMap(group => group.fields);
-    return allFields.filter(f => (f as any).isSummary);
+    // Le cast est nécessaire car les types du manifest sont plus larges que 'any'
+    return allFields.filter(f => (f as any).isSummary); 
   }, [nodeConfig]);
 
   // 5. ALERTES CRITIQUES
@@ -68,6 +69,7 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
   // 6. LIAISONS SANS FIL (Wireless)
   const wirelessLinks = useMemo(() => {
     const links = [];
+    // Parcours toutes les propriétés pour trouver les IDs de connexion logiques
     for (const [key, value] of Object.entries(props)) {
         if (typeof value === 'string' && (key.endsWith('NetworkId') || key.endsWith('SourceId') || key.endsWith('TargetId') || key.endsWith('Id'))) {
             const target = allNodes.find(n => n.id === value);
@@ -88,6 +90,13 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
     }
     return links;
   }, [props, allNodes]);
+  
+  // 7. DONNÉES DE CONSIGNE (CIBLE)
+  // Récupération de la nouvelle clé injectée par le solveur
+  const targetConcentrations = simResults.target_concentrations || {};
+  const hasTargets = Object.keys(targetConcentrations).length > 0;
+  const isProcessBath = nodeType === 'PROCESS_BATH';
+
 
   return (
     <div 
@@ -146,6 +155,25 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
             </div>
         )}
 
+        {/* --- BLOC NOUVEAU : CONSIGNES CHIMIQUES (TARGETS) --- */}
+        {isProcessBath && hasTargets && (
+            <div className="mt-2 pt-2 border-t border-slate-100 animate-in fade-in slide-in-from-top-1">
+                <span className="text-[9px] font-black uppercase text-purple-600 mb-1 block">Consignes Ioniques (g/L)</span>
+                <div className="flex flex-wrap gap-2">
+                    {Object.entries(targetConcentrations).map(([ion, targetValue]: [string, any]) => (
+                        <div key={ion} className="flex items-center gap-1.5 px-2 py-1 bg-purple-50 border border-purple-100 rounded-lg shadow-xs">
+                            <span className="text-[9px] font-bold text-slate-700">{ion}</span>
+                            <span className="text-[10px] font-black text-purple-700 font-mono">
+                                {targetValue.toFixed(2)}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+        {/* --- FIN DU BLOC NOUVEAU --- */}
+
+
         {/* ACCESSOIRES */}
         {accessories.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-50">
@@ -183,6 +211,7 @@ export const SmartNode = memo(({ id, data, selected }: NodeProps) => {
         )}
 
         {/* KPI HYDRAULIQUE */}
+        {/* Note: simResults.flow n'existe pas dans le solveur actuel, mais nous le laissons pour la compatibilité future */}
         {simResults.flow > 0 && (
             <div className="flex items-center gap-2 text-slate-400 mt-1">
                 <Activity className="w-3 h-3" />

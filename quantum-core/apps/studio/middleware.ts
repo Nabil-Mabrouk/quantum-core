@@ -1,15 +1,23 @@
 import NextAuth from 'next-auth';
 import { authConfig } from './auth.config';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 const { auth } = NextAuth(authConfig);
 
 const locales = ['fr', 'en'];
 const defaultLocale = 'fr';
 
-/**
- * Détermine la locale préférée de l'utilisateur
- */
+// 1. TYPAGE INTERNE POUR LA SÉCURITÉ DU CODE
+interface NextAuthRequest extends NextRequest {
+  auth: {
+    user?: {
+      id?: string;
+      role?: string;
+    }
+  } | null;
+}
+
 function getLocale(request: NextRequest): string {
   const headers = new Headers(request.headers);
   const acceptLanguage = headers.get('accept-language');
@@ -24,55 +32,63 @@ function getLocale(request: NextRequest): string {
   return defaultLocale;
 }
 
-export default auth((req) => {
-  const { nextUrl } = req;
-  const { pathname } = nextUrl;
+// 2. LOGIQUE DU MIDDLEWARE
+// Note : On ne met pas 'export default' ici directement pour éviter l'erreur d'inférence
+const middleware = auth((req) => {
+  // On cast 'req' pour avoir l'autocomplétion sur 'req.auth' à l'intérieur
+  const request = req as NextAuthRequest;
+  const { nextUrl } = request;
+  const pathname = nextUrl.pathname;
 
-  // 1. EXCLUSION CRITIQUE POUR LES API ET ASSETS
-  // Cette partie empêche l'erreur "Unexpected token <" (NextAuth reçoit du JSON et non du HTML)
+  // A. EXCLUSION
   if (
-    pathname.startsWith('/api') ||      // Ne pas toucher aux routes API
-    pathname.startsWith('/_next') ||   // Ne pas toucher aux fichiers internes Next.js
-    pathname.includes('.')             // Ne pas toucher aux fichiers (favicon, images, etc.)
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/_next') ||
+    pathname.includes('.')
   ) {
     return NextResponse.next();
   }
 
-  // 2. VÉRIFICATION DE LA PRÉSENCE DE LA LOCALE DANS L'URL
+  // B. LOCALE
   const pathnameHasLocale = locales.some(
     (locale) => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`
   );
 
-  // 3. REDIRECTION i18n SI LA LOCALE EST MANQUANTE
   if (!pathnameHasLocale) {
-    const locale = getLocale(req);
-    // On conserve impérativement les paramètres de recherche (?systemId=...)
+    const locale = getLocale(request);
     const search = nextUrl.search;
     return NextResponse.redirect(
-      new URL(`/${locale}${pathname}${search}`, req.url)
+      new URL(`/${locale}${pathname}${search}`, request.url)
     );
   }
 
-  // 4. LOGIQUE D'AUTORISATION ET SÉCURITÉ
-  const isLoggedIn = !!req.auth;
-  // On cast l'utilisateur pour accéder au rôle défini dans auth.config.ts
-  const user = req.auth?.user as { role?: string } | undefined;
-  const userRole = user?.role;
+  // C. SÉCURITÉ
+  const isLoggedIn = !!request.auth;
+  const userRole = request.auth?.user?.role; 
 
-  // On extrait la locale actuelle de l'URL pour les redirections de sécurité
   const currentLocale = pathname.split('/')[1] || defaultLocale;
   const isAdminRoute = pathname.startsWith(`/${currentLocale}/admin`);
 
   if (isAdminRoute) {
-    // Si l'utilisateur n'est pas connecté
     if (!isLoggedIn) {
+      const callbackUrl = encodeURIComponent(pathname);
       return NextResponse.redirect(
-        new URL(`/${currentLocale}/login`, nextUrl.origin)
+        new URL(`/${currentLocale}/login?callbackUrl=${callbackUrl}`, nextUrl.origin)
       );
     }
-    // Si connecté mais n'est pas ADMIN
+    
     if (userRole !== "ADMIN") {
-      console.warn(`[Middleware] Accès refusé à ${pathname} pour le rôle: ${userRole}`);
+      console.warn(JSON.stringify({
+        level: "WARN",
+        type: "SECURITY_AUDIT",
+        event: "UNAUTHORIZED_ADMIN_ACCESS",
+        userId: request.auth?.user?.id || "unknown",
+        role: userRole || "unknown",
+        path: pathname,
+        ip: request.headers.get('x-forwarded-for') || "unknown",
+        timestamp: new Date().toISOString()
+      }));
+
       return NextResponse.redirect(
         new URL(`/${currentLocale}/dashboard`, nextUrl.origin)
       );
@@ -82,7 +98,11 @@ export default auth((req) => {
   return NextResponse.next();
 });
 
+// 3. EXPORT FINAL AVEC CAST
+// C'est cette ligne qui corrige l'erreur "The inferred type..."
+// On dit à TypeScript : "C'est bon, exporte ça comme un objet générique, ne cherche pas plus loin."
+export default middleware as any; 
+
 export const config = {
-  // On applique le middleware à toutes les routes sauf celles explicitement listées
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico|uploads).*)'],
 };

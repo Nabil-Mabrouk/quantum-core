@@ -13,10 +13,12 @@ export const createGraphSlice: StateCreator<CanvasState, [], [], GraphSlice> = (
   addNode: (type, position) => {
     const config = getDomainConfig();
     const nodeSchema = config.nodeTypes[type];
-    const initialProps = nodeSchema?.fields?.reduce((acc: any, f: any) => {
-      acc[f.id] = f.default;
-      return acc;
-    }, {}) || {};
+    const initialProps: Record<string, any> = {};
+    nodeSchema.groups.flatMap((g: any) => g.fields).forEach((f: any) => {
+        if (f.default !== undefined) {
+            initialProps[f.id] = f.default;
+        }
+    });
 
     const newNode = {
       id: crypto.randomUUID(),

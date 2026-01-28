@@ -6,11 +6,50 @@ import { loadGraph } from './graph';
 import { auth } from "@/auth";
 import { getDomainConfig } from '@/lib/registry'; 
 import { NodeSchema } from '@/lib/domain-config';
+import { logSecurityEvent } from './security';
+import { z } from 'zod';
 
-// --- SECURITY HELPERS ---
+// ====================================================================
+// 1. TYPES & SCHÉMAS
+// ====================================================================
 
+type AppNodeWithData = {
+  id: string;
+  type: string;
+  data: {
+    type: string;
+    properties: Record<string, any>;
+  };
+};
+
+/**
+ * Interface pour le retour standardisé des appels moteur
+ */
+interface EngineResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+// ====================================================================
+// 2. HELPERS DE SÉCURITÉ & ACCÈS
+// ====================================================================
+
+/**
+ * Extrait les paramètres spécifiques au domaine depuis les properties JSONB du projet
+ */
+function getDomainSettings(project: any, domain: string) {
+  const properties = (project?.properties as any) || {};
+  return properties[domain] || {};
+}
+
+/**
+ * Vérifie l'accès à un projet et inclut toute l'arborescence technique.
+ * Cette version est optimisée pour charger tout le "System of Systems" en une fois.
+ */
 async function getAuthenticatedProject(projectId: string, userId: string | undefined) {
   if (!userId) throw new Error("Non autorisé: Session utilisateur requise.");
+  
   const project = await db.project.findUnique({
     where: { id: projectId, userId: userId },
     include: {
@@ -26,39 +65,53 @@ async function getAuthenticatedProject(projectId: string, userId: string | undef
       streams: true
     }
   });
-  if (!project) throw new Error("Projet introuvable ou non autorisé.");
+
+  if (!project) throw new Error("Projet introuvable ou accès refusé.");
   return project;
 }
 
+/**
+ * Vérifie l'accès à un système spécifique et récupère le Bus Projet (Streams) associé.
+ */
 async function getAuthenticatedSystem(systemId: string, userId: string | undefined) {
   if (!userId) throw new Error("Non autorisé: Session utilisateur requise.");
+  
   const system = await db.system.findUnique({
     where: { id: systemId },
     include: { project: { include: { streams: true } } }
   });
-  if (!system) throw new Error("Système introuvable.");
-  if (system.project.userId !== userId) throw new Error("Non autorisé: Propriétaire requis.");
+
+  if (!system || system.project.userId !== userId) {
+    throw new Error("Accès refusé: Vous n'êtes pas propriétaire de ce système.");
+  }
   return system;
 }
 
-// --- NETWORK UTILS ---
+// ====================================================================
+// 3. UTILITAIRES RÉSEAU (BRIDGE NEXT.JS <-> PYTHON)
+// ====================================================================
 
 /**
- * Appelle le moteur de calcul Python avec un Timeout de sécurité
+ * Gère la communication HTTP avec le moteur FastAPI.
+ * @param endpoint - Route du moteur (ex: /simulate)
+ * @param payload - Données JSON structurées
+ * @returns Objet standardisé avec succès/erreur et données
  */
-async function callEngine(endpoint: string, payload: any) {
+async function callEngine(endpoint: string, payload: any): Promise<EngineResponse> {
   const engineUrl = process.env.ENGINE_URL;
   const secret = process.env.INTERNAL_API_SECRET;
 
   if (!engineUrl || !secret) {
-    return { success: false, error: "Configuration serveur manquante (URL ou Secret)" };
+    console.error("❌ CRITIQUE: Configuration moteur manquante dans .env");
+    return { success: false, error: "Configuration serveur incomplète." };
   }
 
-  // SÉCURITÉ : Timeout augmenté à 30s pour les simulations complexes
+  // SÉCURITÉ : AbortController pour ne pas bloquer le thread Next.js indéfiniment
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try {
+    const startTime = Date.now();
     const response = await fetch(`${engineUrl}${endpoint}`, {
       method: 'POST',
       headers: {
@@ -73,35 +126,32 @@ async function callEngine(endpoint: string, payload: any) {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      return { success: false, error: `Moteur Python (${response.status}): ${errorBody}` };
+      const errorMsg = await response.text();
+      return { success: false, error: `Erreur Moteur Physics (${response.status}): ${errorMsg}` };
     }
 
     const data = await response.json();
+    const duration = Date.now() - startTime;
+
+    console.log(`🚀 [ENGINE] Simulation sur ${endpoint} terminée en ${duration}ms`);
     return { success: true, data };
 
   } catch (error: any) {
     if (error.name === 'AbortError') {
-        return { success: false, error: "Le moteur de calcul a expiré (Timeout 30s)." };
+        return { success: false, error: "Le moteur de calcul n'a pas répondu à temps (Timeout 30s)." };
     }
-    return { success: false, error: "Incapable de joindre le moteur : " + error.message };
+    return { success: false, error: "Connexion au moteur de calcul impossible." };
   }
 }
 
-// --- HELPER WIRELESS & FORMATTING ---
-
-type AppNodeWithData = {
-  id: string;
-  type: string;
-  data: {
-    type: string;
-    properties: Record<string, any>;
-  };
-};
+// ====================================================================
+// 4. LOGIQUE DE TOPOLOGIE (LIENS VIRTUELS & DÉDOUBLONNAGE)
+// ====================================================================
 
 /**
- * Transforme les propriétés de type 'node-selector' en liens logiques (Virtual Edges)
- * pour que le solveur comprenne les raccordements sans fils tracés.
+ * Analyse le Manifeste du Domaine pour transformer les sélections de champs 
+ * (ex: 'Alimentation du spray') en arêtes logiques réelles pour le solveur.
+ * Cela permet de relier des équipements sans dessiner de tuyaux sur le graphe.
  */
 function createVirtualEdges(nodes: AppNodeWithData[], domainManifest: any) {
   const virtualEdges: any[] = [];
@@ -112,16 +162,15 @@ function createVirtualEdges(nodes: AppNodeWithData[], domainManifest: any) {
     if (!nodeSchema) return;
 
     nodeSchema.fields.forEach(field => {
+      // Un champ 'node-selector' définit un lien logique (ex: un bac A puise dans un bac B)
       if (field.type === 'node-selector') {
         const targetNodeId = sourceNode.data.properties[field.id];
         if (targetNodeId && nodeMap.has(targetNodeId)) {
-          // On utilise l'ID du champ (ex: spraySourceId) comme TYPE du lien virtuel
-          const virtualEdgeType = field.id.toUpperCase(); 
           virtualEdges.push({
-            id: `virtual-${sourceNode.id}-${targetNodeId}-${virtualEdgeType}`,
+            id: `virtual-${sourceNode.id}-${targetNodeId}-${field.id}`,
             source: sourceNode.id,
             target: targetNodeId,
-            type: virtualEdgeType,
+            type: field.id.toUpperCase(), // Le type de lien permet au solveur de savoir quel flux est concerné
             properties: { isVirtual: true, fieldId: field.id }
           });
         }
@@ -131,6 +180,10 @@ function createVirtualEdges(nodes: AppNodeWithData[], domainManifest: any) {
   return virtualEdges;
 }
 
+/**
+ * Fusionne les arêtes dessinées (Pipes) et les arêtes logiques (Virtual)
+ * en évitant les doublons si l'utilisateur a dessiné ce qui est déjà sélectionné.
+ */
 function deduplicateEdges(physicalEdges: any[], virtualEdges: any[]) {
   const finalEdges = [...virtualEdges];
   const virtualEdgeSet = new Set<string>();
@@ -140,13 +193,17 @@ function deduplicateEdges(physicalEdges: any[], virtualEdges: any[]) {
   });
 
   physicalEdges.forEach(pEdge => {
-    const pEdgeKey = `${pEdge.source}-${pEdge.target}-${pEdge.type || 'default'}`;
+    const sourceId = pEdge.source || pEdge.sourceId;
+    const targetId = pEdge.target || pEdge.targetId;
+    const type = pEdge.type || 'default';
+    const pEdgeKey = `${sourceId}-${targetId}-${type}`;
+
     if (!virtualEdgeSet.has(pEdgeKey)) {
       finalEdges.push({
         id: pEdge.id,
-        source: pEdge.source || pEdge.sourceId,
-        target: pEdge.target || pEdge.targetId,
-        type: pEdge.type || 'default',
+        source: sourceId,
+        target: targetId,
+        type: type,
         properties: pEdge.data || pEdge.properties || {}
       });
     }
@@ -156,8 +213,9 @@ function deduplicateEdges(physicalEdges: any[], virtualEdges: any[]) {
 }
 
 /**
- * Formate la bibliothèque Prisma pour le solveur Python.
- * Gère la hiérarchie Produit -> Réactif -> Ion.
+ * Prépare la bibliothèque pour NumPy.
+ * Transforme les relations Prisma (Noms, Composants) en dictionnaires 
+ * indexés par ID pour un calcul matriciel rapide.
  */
 function formatLibraryForPython(rawLibrary: any[]) {
     return {
@@ -166,190 +224,204 @@ function formatLibraryForPython(rawLibrary: any[]) {
             name: item.name,
             category: item.category,
             properties: item.properties,
-            // On extrait la composition récursivement
             composition: item.components?.map((c: any) => ({
                 baseUnitId: c.childId,
                 coefficient: c.quantity,
                 unit: c.unit
             })) || []
         })),
-        // Les Ions (catégorie ION) servent d'unités de base pour le calcul matriciel
         baseUnits: rawLibrary
             .filter(i => i.category === 'ION')
             .map(i => ({
                 id: i.id,
                 name: i.name,
-                properties: i.properties // contient la valence et la masse molaire
+                properties: i.properties
             }))
     };
 }
 
-// --- SERVER ACTIONS ---
+// Helper pour mapper les séquences (cadence -> productionRate)
+function mapSequenceForSolver(s: any) {
+  return {
+    id: s.id, 
+    steps: s.steps, 
+    properties: {
+      // Mapping critique : le domaine utilise 'cadence' mais le solveur attend 'productionRate'
+      productionRate: s.properties?.cadence ?? s.properties?.productionRate ?? 0,
+      dragOutSpecific: s.properties?.dragOutSpecific ?? 0.1,
+      // Conserver les autres propriétés si elles existent
+      ...s.properties
+    }
+  };
+}
+
+// ====================================================================
+// 5. ACTIONS SERVEUR (LOGIQUE MÉTIER)
+// ====================================================================
 
 /**
- * 1. SIMULATION D'UN SEUL SYSTÈME (LIGNE)
+ * SIMULATION D'UN SEUL SYSTÈME (LIGNE DE PRODUCTION)
+ * C'est l'action appelée lors du clic sur le bouton "Simuler" dans l'éditeur.
  */
 export async function runSimulationAction(domain: string, systemId: string, nodes: any[], edges: any[], sequences: any[]) {
   const session = await auth();
-  const systemWithStreams = await getAuthenticatedSystem(systemId, session?.user?.id);
-  
-  const library = await getLibrary(domain);
-  const domainManifest = getDomainConfig(domain);
+  const userId = session?.user?.id;
 
-  const projectStreams = systemWithStreams.project.streams || [];
+  try {
+    const systemWithStreams = await getAuthenticatedSystem(systemId, userId);
+    
+    // 1. Chargement du contexte technique
+    const library = await getLibrary(domain);
+    const domainManifest = getDomainConfig(domain);
+    const projectStreams = systemWithStreams.project.streams || [];
+    
+    // Extraction des paramètres spécifiques au domaine depuis properties JSONB
+    const domainSettings = getDomainSettings(systemWithStreams.project, domain);
 
-  const formattedNodes = nodes.map(n => ({
-    id: n.id,
-    type: n.type,
-    data: { type: n.data.type, properties: n.data.properties }
-  }));
+    // 2. Traitement de la topologie hybride (Graph + Paramètres)
+    const formattedNodes = nodes.map(n => ({
+      id: n.id,
+      type: n.type,
+      data: { type: n.data.type, properties: n.data.properties }
+    }));
 
-  const virtualEdges = createVirtualEdges(formattedNodes, domainManifest);
-  const processedEdges = deduplicateEdges(edges, virtualEdges);
+    const virtualEdges = createVirtualEdges(formattedNodes, domainManifest);
+    const processedEdges = deduplicateEdges(edges, virtualEdges);
 
-  // Construction des réglages projet (Horaires, etc.)
-  const projectSettings = {
-    hoursPerDay: systemWithStreams.project.hoursPerDay,
-    daysPerWeek: systemWithStreams.project.daysPerWeek,
-    weeksPerYear: systemWithStreams.project.weeksPerYear,
-    // On peut injecter ici des constantes d'environnement si besoin (ex: humidité par défaut)
-    workshopTemp: 20,
-    workshopHumidity: 60
-  };
-
-  const payload = {
-    domain,
-    library: formatLibraryForPython(library),
-    project_settings: projectSettings,
-    nodes: nodes.map(n => {
-      const props = { ...n.data.properties };
-      // Injection des données venant du Bus Projet (inputStreamId)
-      if (n.data.properties?.inputStreamId) {
-        const stream = projectStreams.find(s => s.id === n.data.properties.inputStreamId);
-        if (stream) {
-          const streamVal = stream.value as any;
-          props.inletFlow = streamVal?.flow || 0;
-          props.externalConcentrations = streamVal?.concentrations || {};
+    // 3. Construction du Payload Physics
+    const payload = {
+      domain,
+      library: formatLibraryForPython(library),
+      project_settings: {
+        // Champs génériques (communs)
+        hoursPerDay: systemWithStreams.project.hoursPerDay,
+        daysPerWeek: systemWithStreams.project.daysPerWeek,
+        weeksPerYear: systemWithStreams.project.weeksPerYear,
+        // Champs spécifiques au domaine (depuis properties JSONB)
+        workshopTemp: domainSettings.workshopTemp ?? 20,
+        evapCoefficient: domainSettings.evapCoefficient ?? 0.02,
+        evapAgitationFactor: domainSettings.evapAgitationFactor ?? 1.5,
+        evapCoverReductionFactor: domainSettings.evapCoverReductionFactor ?? 0.1,
+        workshopHumidity: domainSettings.workshopHumidity ?? 60
+      },
+      nodes: nodes.map(n => {
+        const props = { ...n.data.properties };
+        // --- LOGIQUE BUS PROJET ---
+        // Si le nœud est connecté à un flux global (Bus), on injecte les données calculées
+        // provenant des autres systèmes du projet.
+        if (n.data.properties?.inputStreamId) {
+          const stream = projectStreams.find(s => s.id === n.data.properties.inputStreamId);
+          if (stream) {
+            const streamVal = stream.value as any;
+            props.inletFlow = streamVal?.flow || 0;
+            props.externalConcentrations = streamVal?.concentrations || {};
+          }
         }
-      }
-      return { id: n.id, type: n.data.type, properties: props };
-    }),
-    edges: processedEdges,
-    sequences: sequences.map(s => ({
-      id: s.id,
-      name: s.name,
-      steps: s.steps,
-      properties: s.properties || {}
-    }))
-  };
+        return { 
+          id: n.id, 
+          type: n.data.type, 
+          data: { label: n.data.label || n.id },
+          properties: props 
+        };
+      }),
+      edges: processedEdges,
+      sequences: sequences.map(mapSequenceForSolver)
+    };
 
-  return await callEngine('/simulate', payload);
+    // 4. Logging & Exécution
+    await logSecurityEvent('INFO', { action: 'SIMULATION_LOCAL_START', userId, metadata: { systemId, domain } });
+
+    console.log("PAYLOAD VERS SOLVER:", JSON.stringify({
+        ...payload,
+        sequences: payload.sequences.map(s => ({  
+          id: s.id,
+          prodRate: s.properties.productionRate,
+          dragOut: s.properties.dragOutSpecific,
+          stepsCount: s.steps.length
+        }))
+      }, null, 2));
+
+    const result = await callEngine('/simulate', payload);
+
+    if (result.success) {
+        await logSecurityEvent('INFO', { action: 'SIMULATION_LOCAL_SUCCESS', userId, metadata: { systemId } });
+    } else {
+        await logSecurityEvent('WARN', { action: 'SIMULATION_LOCAL_FAILED', userId, metadata: { error: result.error } });
+    }
+
+    return result;
+
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
 }
 
 /**
- * 2. ÉVALUATION D'UN NŒUD UNIQUE
- */
-export async function evaluateNodeAction(domain: string, nodeType: string, properties: any) {
-  const result = await callEngine('/evaluate-node', { domain, node_type: nodeType, properties });
-  if (!result.success) return { computed: {} };
-  return result.data;
-}
-
-/**
- * 3. GÉNÉRATION DE PROPOSITION IA
- */
-export async function generateProposalAction(domain: string, nodes: any[], edges: any[], sequences: any[]) {
-  const domainManifest = getDomainConfig(domain);
-  const formattedNodes = nodes.map(n => ({
-    id: n.id,
-    type: n.type,
-    data: { type: n.data.type, properties: n.data.properties }
-  }));
-
-  const virtualEdges = createVirtualEdges(formattedNodes, domainManifest);
-  const processedEdges = deduplicateEdges(edges, virtualEdges);
-
-  const payload = {
-    domain,
-    nodes: nodes.map(n => ({ id: n.id, type: n.data.type, properties: n.data.properties || {} })),
-    edges: processedEdges,
-    sequences: sequences.map(s => ({ id: s.id, steps: s.steps, properties: s.properties || {} }))
-  };
-  
-  const result = await callEngine('/generate-proposal', payload);
-  if (result.success) return { success: true, proposal: result.data.proposal };
-  return result;
-}
-
-/**
- * 4. SIMULATION GLOBALE PROJET (SYSTEM OF SYSTEMS)
+ * SIMULATION GLOBALE DU PROJET (SYSTEM OF SYSTEMS)
+ * Résout les dépendances entre toutes les lignes de production (ex: rejet ligne 1 -> entrée station).
  */
 export async function runGlobalProjectSimulation(projectId: string) {
   const session = await auth();
-  if (!projectId) return { success: false, error: "ID de projet manquant" };
+  const userId = session?.user?.id;
 
   try {
-    const project = await getAuthenticatedProject(projectId, session?.user?.id);
+    const project = await getAuthenticatedProject(projectId, userId);
     const rawLibrary = await getLibrary(project.domain);
     const domainManifest = getDomainConfig(project.domain);
     
-    const formattedLibrary = formatLibraryForPython(rawLibrary);
-
+    // Extraction des paramètres spécifiques au domaine depuis properties JSONB
+    const domainSettings = getDomainSettings(project, project.domain);
+    
+    // Construction du payload incluant TOUS les systèmes du projet
     const payload = {
       projectId: project.id,
       domain: project.domain,
-      library: formattedLibrary,
+      library: formatLibraryForPython(rawLibrary),
       project_settings: {
           hoursPerDay: project.hoursPerDay,
           daysPerWeek: project.daysPerWeek,
           weeksPerYear: project.weeksPerYear,
-          workshopTemp: 20,
-          workshopHumidity: 60
+          workshopTemp: domainSettings.workshopTemp ?? 20,
+          evapCoefficient: domainSettings.evapCoefficient ?? 0.02,
+          evapAgitationFactor: domainSettings.evapAgitationFactor ?? 1.5,
+          evapCoverReductionFactor: domainSettings.evapCoverReductionFactor ?? 0.1,
+          workshopHumidity: domainSettings.workshopHumidity ?? 60
       },
       systems: project.systems.map(sys => {
-        const sysNodes: AppNodeWithData[] = sys.nodes.map(n => ({
-          id: n.id,
-          type: n.type,
-          data: {
-            type: n.type,
-            properties: n.properties as Record<string, any>,
-          }
+        const sysNodesTyped: AppNodeWithData[] = sys.nodes.map(n => ({
+          id: n.id, type: n.type, data: { type: n.type, properties: n.properties as any }
         }));
-
-        const virtualEdges = createVirtualEdges(sysNodes, domainManifest);
-        const processedEdges = deduplicateEdges(sys.edges, virtualEdges);
-
         return {
           id: sys.id,
           type: sys.type,
           nodes: sys.nodes.map(n => ({
-            id: n.id,
-            type: n.type,
+            id: n.id, 
+            type: n.type, 
+            data: { label: n.label || n.id }, // Ajout du label
             properties: n.properties as any,
-            inputStreamId: n.inputStreamId,
+            inputStreamId: n.inputStreamId, 
             outputStreamId: n.outputStreamId
           })),
-          edges: processedEdges,
+          edges: deduplicateEdges(sys.edges, createVirtualEdges(sysNodesTyped, domainManifest)),
           sequences: sys.sequences.map(s => ({
-            id: s.id,
-            name: s.name,
-            steps: s.steps.map(st => st.nodeId),
-            properties: s.properties as any
+            id: s.id, 
+            steps: s.steps.map(st => st.nodeId), 
+            properties: {
+              productionRate: s.properties?.cadence ?? s.properties?.productionRate ?? 0,
+              dragOutSpecific: s.properties?.dragOutSpecific ?? 0.1
+            }
           }))
         };
       }),
-      streams: project.streams.map(s => ({
-        id: s.id,
-        name: s.name,
-        value: s.value
-      }))
+      streams: project.streams.map(s => ({ id: s.id, name: s.name, value: s.value }))
     };
 
     const response = await callEngine('/solve-project', payload);
 
+    // PERSISTANCE : Si le projet est résolu, on met à jour les flux (Bus) en base de données
     if (response.success && response.data.status === "success") {
       const streamResults = response.data.results.streams;
-      // Mise à jour atomique des flux dans la base de données
+      
       await db.$transaction(
         Object.entries(streamResults).map(([streamId, value]) =>
           db.projectStream.update({
@@ -358,6 +430,8 @@ export async function runGlobalProjectSimulation(projectId: string) {
           })
         )
       );
+      
+      await logSecurityEvent('INFO', { action: 'SIMULATION_GLOBAL_SUCCESS', userId, metadata: { projectId } });
     }
 
     return response;
@@ -368,58 +442,114 @@ export async function runGlobalProjectSimulation(projectId: string) {
 }
 
 /**
- * 5. BILAN RÉSUMÉ (Point d'entrée pour le rapport final)
+ * POINT D'ENTRÉE POUR LE BILAN TECHNIQUE RÉSUMÉ
+ * Récupère le bilan complet (financier, environnemental, ionique) pour le rapport final.
  */
 export async function runProjectSummaryAction(projectId: string) {
   const session = await auth();
+  const userId = session?.user?.id;
+
   try {
-    const project = await getAuthenticatedProject(projectId, session?.user?.id);
+    const project = await getAuthenticatedProject(projectId, userId);
     const library = await getLibrary(project.domain);
-    const domainManifest = getDomainConfig(project.domain);
+    
+    // Extraction des paramètres spécifiques au domaine depuis properties JSONB
+    const domainSettings = getDomainSettings(project, project.domain);
 
-    const systemsData = await Promise.all(project.systems.map(async (sys) => {
-      const graph = await loadGraph(sys.id); 
-      const sequencesFromDb = await db.sequence.findMany({
-        where: { systemId: sys.id },
-        include: { steps: { orderBy: { order: 'asc' } } }
-      });
-
-      const sysNodes: AppNodeWithData[] = graph.nodes.map((n: any) => ({
-        id: n.id,
-        type: n.type,
-        data: { type: n.data.type, properties: n.data.properties || {} }
+    // Extraction optimisée des données de simulation
+    const systemsSummaryPayload = project.systems.map((sys) => {
+      // Note: On réutilise la logique de topologie pour chaque système
+      // Mais ici, on utilise les données déjà chargées dans 'project' (évite le N+1)
+      const domainManifest = getDomainConfig(project.domain);
+      const sysNodesTyped: AppNodeWithData[] = sys.nodes.map(n => ({
+        id: n.id, type: n.type, data: { type: n.type, properties: n.properties as any }
       }));
 
-      const virtualEdges = createVirtualEdges(sysNodes, domainManifest);
-      const processedEdges = deduplicateEdges(graph.edges, virtualEdges);
-
       return {
-        domain: project.domain,
-        nodes: graph.nodes.map((n: any) => ({
-          id: n.id,
-          type: n.data.type,
-          properties: n.data.properties || {}
+        id: sys.id,
+        nodes: sys.nodes.map(n => ({ 
+          id: n.id, 
+          type: n.type, 
+          data: { label: n.label || n.id }, // Ajout du label
+          properties: n.properties || {} 
         })),
-        edges: processedEdges,
-        sequences: sequencesFromDb.map(s => ({
-          id: s.id,
-          name: s.name,
-          steps: s.steps.map(step => step.nodeId),
-          properties: s.properties as Record<string, any>,
+        edges: deduplicateEdges(sys.edges, createVirtualEdges(sysNodesTyped, domainManifest)),
+        sequences: sys.sequences.map(s => ({
+          id: s.id, 
+          steps: s.steps.map(step => step.nodeId), 
+          properties: {
+            productionRate: s.properties?.cadence ?? s.properties?.productionRate ?? 0,
+            dragOutSpecific: s.properties?.dragOutSpecific ?? 0.1
+          }
         }))
       };
-    }));
+    });
 
-    return await callEngine('/project-summary', {
+    const result = await callEngine('/project-summary', {
       domain: project.domain,
       library: formatLibraryForPython(library),
-      project_settings: {
-          hoursPerDay: project.hoursPerDay,
-          daysPerWeek: project.daysPerWeek
+      project_settings: { 
+        hoursPerDay: project.hoursPerDay, 
+        daysPerWeek: project.daysPerWeek,
+        weeksPerYear: project.weeksPerYear,
+        workshopTemp: domainSettings.workshopTemp ?? 20,
+        evapCoefficient: domainSettings.evapCoefficient ?? 0.02,
+        evapAgitationFactor: domainSettings.evapAgitationFactor ?? 1.5,
+        evapCoverReductionFactor: domainSettings.evapCoverReductionFactor ?? 0.1
       },
-      systems: systemsData
+      systems: systemsSummaryPayload
     });
+
+    if (result.success) {
+        await logSecurityEvent('INFO', { action: 'PROJECT_REPORT_GENERATED', userId, metadata: { projectId } });
+    }
+
+    return result;
+
   } catch (error: any) {
-    return { success: false, error: "Erreur bilan : " + error.message };
+    return { success: false, error: "Erreur lors de la génération du bilan : " + error.message };
   }
+}
+
+/**
+ * ÉVALUATION RÉACTIVE D'UN NŒUD (MICRO-CALCUL)
+ * Permet de calculer l'évaporation ou le dimensionnement d'un bac en temps réel lors de la saisie.
+ */
+export async function evaluateNodeAction(domain: string, nodeType: string, properties: any) {
+  const result = await callEngine('/evaluate-node', { domain, node_type: nodeType, properties });
+  if (!result.success) return { computed: {} };
+  return result.data;
+}
+
+/**
+ * GÉNÉRATION DE PROPOSITION IA
+ * Appelle le moteur LLM pour rédiger un argumentaire technique basé sur le graphe.
+ */
+export async function generateProposalAction(domain: string, nodes: any[], edges: any[], sequences: any[]) {
+  const session = await auth();
+  const domainManifest = getDomainConfig(domain);
+  
+  const formattedNodes = nodes.map(n => ({
+    id: n.id, type: n.type, data: { type: n.data.type, properties: n.data.properties }
+  }));
+
+  const payload = {
+    domain,
+    nodes: nodes.map(n => ({ 
+      id: n.id, 
+      type: n.data.type, 
+      data: { label: n.data.label || n.id }, // Ajout du label pour cohérence
+      properties: n.data.properties || {} 
+    })),
+    edges: deduplicateEdges(edges, createVirtualEdges(formattedNodes, domainManifest)),
+    sequences: sequences.map(mapSequenceForSolver) // Utilisation du helper pour mapper cadence->productionRate
+  };
+  
+  const result = await callEngine('/generate-proposal', payload);
+  
+  if (result.success) {
+      await logSecurityEvent('INFO', { action: 'AI_PROPOSAL_GENERATED', userId: session?.user?.id, metadata: { domain } });
+      return { success: true, proposal: result.data.proposal };
+  }
+  return result;
 }

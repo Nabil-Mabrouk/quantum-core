@@ -1,39 +1,29 @@
 'use client';
 
 import { BarChart3 } from 'lucide-react';
-import { getDomainReport } from '@/lib/component-registry';
 import { getDomainConfig } from '@/lib/registry';
+import { useCanvasStore } from '@/store/canvas-store'; // 🚩 Import du store pour la réactivité
+import { GenericReportViewer } from './generic-report-viewer'; // 🚩 Import de la coque générique
 
 interface SummaryViewProps {
-  summaryData: any;
-  domain?: string;
+  // Supprimer summaryData ici pour utiliser le store (meilleure réactivité)
+  domain: string; 
 }
 
-export function SummaryView({ summaryData, domain }: SummaryViewProps) {
-  // 1. Résolution du Domaine : Prop > Config Active > Défaut
-  const activeDomain = domain || getDomainConfig().id;
+export function SummaryView({ domain }: SummaryViewProps) {
+  // 1. Récupération des données du Store (Zustand)
+  const summaryData = useCanvasStore((state) => state.summaryData);
   
-  // 2. Récupération dynamique du composant de rapport via le Registre
-  const ReportComponent = getDomainReport(activeDomain);
+  // 2. Résolution du Domaine : Prop > Config Active > Défaut (Le code d'origine est trop complexe)
+  // On utilise la prop `domain` passée par le Workspace, qui vient du Project.
+  const activeDomain = domain || getDomainConfig().id;
 
   // 3. Affichage Conditionnel
-  if (summaryData && ReportComponent) {
-      return <ReportComponent />;
-  }
-
-  // 4. États vides / Fallback
-  if (!summaryData) return (
-    <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
-        <BarChart3 className="w-12 h-12 mb-4 opacity-20" />
-        <p className="font-bold uppercase text-xs tracking-widest">Lancez une analyse pour générer le bilan</p>
-    </div>
-  );
-
+  // On délègue tout le travail de vérification et de rendu au GenericReportViewer
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
-        <p className="font-bold uppercase text-xs tracking-widest">
-            Aucun modèle de rapport trouvé pour le domaine : {activeDomain}
-        </p>
+    <div className="flex-1 flex flex-col overflow-y-auto">
+        {/* On passe le Domain et les Données brutes de simulation */}
+        <GenericReportViewer domain={activeDomain} summaryData={summaryData} />
     </div>
   );
 }

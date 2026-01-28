@@ -4,9 +4,9 @@ services:
     image: postgres:15-alpine
     container_name: qcore_db
     environment:
-      POSTGRES_USER: quantum
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: quantum_core
+      POSTGRES_USER: ${POSTGRES_USER} 
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5434:5432"
     volumes:
@@ -21,7 +21,7 @@ services:
     volumes:
       - ./apps/engine:/app
     environment:
-      - INTERNAL_API_SECRET=super-secret-quantum-key-2026
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET} 
       - PYTHONUNBUFFERED=1
 
   # 3. Studio (Préparation pour le futur ou le déploiement)

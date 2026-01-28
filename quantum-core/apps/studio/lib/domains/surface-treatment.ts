@@ -1,15 +1,74 @@
 // apps/studio/lib/domains/surface-treatment.ts
 
-import { DomainManifest } from '../domain-config';
+import { DomainManifest, FieldDefinition } from '../domain-config';
+
+const globalEvaporationSettings: FieldDefinition[] = [
+    { 
+        id: "workshopTemp", 
+        label: { fr: "Température Atelier (°C)", en: "Workshop Temp (°C)" }, 
+        type: "quantity", 
+        unit: "°C", 
+        default: 20 
+    },
+    { 
+        id: "evapCoefficient", 
+        label: { fr: "Coeff. Évaporation", en: "Evaporation Coeff." }, 
+        type: "number", 
+        default: 0.02,
+        description: "Facteur empirique (L/h/m²/°C) pour calibration." 
+    },
+    { 
+        id: "evapAgitationFactor", 
+        label: { fr: "Facteur Agitation", en: "Agitation Factor" }, 
+        type: "number", 
+        default: 1.5,
+        description: "Multiplicateur si agitation par air."
+    },
+    { 
+        id: "evapCoverReductionFactor", 
+        label: { fr: "Réduction Couvercle", en: "Cover Reduction Factor" }, 
+        type: "number", 
+        default: 0.1, // 90% de réduction
+        description: "Facteur de réduction si un couvercle est utilisé."
+    },
+];
 
 export const SURFACE_TREATMENT_CONFIG: DomainManifest = {
   id: "SURFACE_TREATMENT",
   name: { fr: "Traitement de Surface", en: "Surface Treatment" },
   
+  globalSettings: globalEvaporationSettings,
+
+  // 🚩 CONFIGURATION UI PILOTÉE PAR LE MANIFESTE
+  // On définit ici les outils pertinents pour l'ingénieur procédé.
+  ui: {
+    enabledViews: ['SYNOPTIC', 'SEQUENCES', 'SUMMARY'], // On cache le mode 'GRAPH' inutile ici
+    defaultView: 'SYNOPTIC'
+  },
+
   libraries: [
     { id: 'chemistry', label: { fr: "Ions & Valence", en: "Ions & Valence" }, iconName: 'Atom', type: 'SIMPLE', categories: ['ION'] },
     { id: 'reagents', label: { fr: "Réactifs Purs", en: "Pure Reagents" }, iconName: 'TestTube', type: 'COMPOUND', categories: ['REAGENT'] },
     { id: 'commercial', label: { fr: "Produits Commerciaux", en: "Commercial Products" }, iconName: 'Package', type: 'COMPOUND', categories: ['COMMERCIAL_PRODUCT'] }
+  ],
+
+  
+    // 🚩 DÉFINITION DES PARAMÈTRES DE GAMME
+  sequenceFields: [
+    { 
+        id: "productionRate", 
+        label: { fr: "Cadence (m²/h)", en: "Production Rate (sqm/h)" }, 
+        type: "quantity", 
+        unit: "m²/h", 
+        default: 10 
+    },
+    { 
+        id: "dragOutSpecific", 
+        label: { fr: "Entraînement (L/m²)", en: "Specific Drag-out (L/sqm)" }, 
+        type: "quantity", 
+        unit: "L/m²", 
+        default: 0.1 
+    },
   ],
 
   nodeTypes: {
