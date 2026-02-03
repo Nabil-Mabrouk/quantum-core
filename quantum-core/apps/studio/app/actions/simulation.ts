@@ -1,3 +1,4 @@
+// apps/studio/app/actions/simulation.ts
 'use server';
 
 import { getLibrary } from './library';
@@ -161,24 +162,29 @@ function createVirtualEdges(nodes: AppNodeWithData[], domainManifest: any) {
     const nodeSchema: NodeSchema | undefined = domainManifest.nodeTypes[sourceNode.data.type];
     if (!nodeSchema) return;
 
-    nodeSchema.fields.forEach(field => {
-      // Un champ 'node-selector' définit un lien logique (ex: un bac A puise dans un bac B)
-      if (field.type === 'node-selector') {
-        const targetNodeId = sourceNode.data.properties[field.id];
-        if (targetNodeId && nodeMap.has(targetNodeId)) {
-          virtualEdges.push({
-            id: `virtual-${sourceNode.id}-${targetNodeId}-${field.id}`,
-            source: sourceNode.id,
-            target: targetNodeId,
-            type: field.id.toUpperCase(), // Le type de lien permet au solveur de savoir quel flux est concerné
-            properties: { isVirtual: true, fieldId: field.id }
-          });
+    // 🚩 CORRECTION DU BUG CRITIQUE (v. fournie) : nodeSchema.fields n'existe pas.
+    // Il faut itérer sur nodeSchema.groups puis sur group.fields.
+    (nodeSchema.groups || []).forEach(group => {
+      (group.fields || []).forEach(field => {
+        
+        // Un champ 'node-selector' définit un lien logique (ex: un bac A puise dans un bac B)
+        if (field.type === 'node-selector') {
+          const targetNodeId = sourceNode.data.properties[field.id];
+          if (targetNodeId && nodeMap.has(targetNodeId)) {
+            virtualEdges.push({
+              id: `virtual-${sourceNode.id}-${targetNodeId}-${field.id}`,
+              source: sourceNode.id,
+              target: targetNodeId,
+              type: field.id.toUpperCase(), // Le type de lien permet au solveur de savoir quel flux est concerné
+              properties: { isVirtual: true, fieldId: field.id }
+            });
+          }
         }
-      }
+      });
     });
   });
   return virtualEdges;
-}
+} // 🚩 CORRECTION DU BUG DE SYNTAXE: Le bloc de code de la fonction doit se terminer ici.
 
 /**
  * Fusionne les arêtes dessinées (Pipes) et les arêtes logiques (Virtual)
@@ -242,14 +248,28 @@ function formatLibraryForPython(rawLibrary: any[]) {
 
 // Helper pour mapper les séquences (cadence -> productionRate)
 function mapSequenceForSolver(s: any) {
+  // 🚩 CORRECTION DU BUG PREDEDENT & ALIGNEMENT NOMENCLATURE: 
+  // productionRate doit être > 0. On prend 10.0 comme valeur par défaut sécurisée.
+  const productionRate = s.properties?.surfaceRate ?? s.properties?.productionRate ?? 10.0;
+  const dragOutSpecific = s.properties?.dragOutSpecific ?? 0.1;
+    
+  // Utilise s.steps si c'est un tableau de strings, sinon s.steps.map(st => st.nodeId)
+  const stepsList = Array.isArray(s.steps) 
+    ? s.steps.map((st: any) => typeof st === 'string' ? st : st.nodeId)
+    : [];
+
   return {
     id: s.id, 
-    steps: s.steps, 
+    steps: stepsList, 
     properties: {
-      // Mapping critique : le domaine utilise 'cadence' mais le solveur attend 'productionRate'
-      productionRate: s.properties?.cadence ?? s.properties?.productionRate ?? 0,
-      dragOutSpecific: s.properties?.dragOutSpecific ?? 0.1,
-      // Conserver les autres propriétés si elles existent
+      // Les noms des propriétés du manifeste sont utilisés pour la rétrocompatibilité et le payload
+      productionRate: productionRate, // Alias de surfaceRate
+      dragOutSpecific: dragOutSpecific,
+      
+      // Assurer que les noms des champs sont cohérents avec le manifeste
+      surfaceRate: productionRate, 
+      
+      // Conserver toutes les propriétés stockées en DB
       ...s.properties
     }
   };
@@ -335,7 +355,8 @@ export async function runSimulationAction(domain: string, systemId: string, node
         ...payload,
         sequences: payload.sequences.map(s => ({  
           id: s.id,
-          prodRate: s.properties.productionRate,
+          // 🚩 CORRECTION DU BUG PREDEDENT (Nommage) : Utilisation de surfaceRate pour le log
+          prodRate: s.properties.surfaceRate, 
           dragOut: s.properties.dragOutSpecific,
           stepsCount: s.steps.length
         }))
@@ -407,7 +428,8 @@ export async function runGlobalProjectSimulation(projectId: string) {
             id: s.id, 
             steps: s.steps.map(st => st.nodeId), 
             properties: {
-              productionRate: s.properties?.cadence ?? s.properties?.productionRate ?? 0,
+              // 🚩 BUG DE VALEUR: productionRate doit être > 0
+              productionRate: s.properties?.surfaceRate ?? s.properties?.productionRate ?? 10.0, 
               dragOutSpecific: s.properties?.dragOutSpecific ?? 0.1
             }
           }))
@@ -478,7 +500,8 @@ export async function runProjectSummaryAction(projectId: string) {
           id: s.id, 
           steps: s.steps.map(step => step.nodeId), 
           properties: {
-            productionRate: s.properties?.cadence ?? s.properties?.productionRate ?? 0,
+            // 🚩 BUG DE VALEUR: productionRate doit être > 0
+            productionRate: s.properties?.surfaceRate ?? s.properties?.productionRate ?? 10.0, 
             dragOutSpecific: s.properties?.dragOutSpecific ?? 0.1
           }
         }))

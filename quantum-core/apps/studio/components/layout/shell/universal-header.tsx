@@ -1,3 +1,4 @@
+// apps/studio/components/layout/shell/universal-header.tsx
 'use client';
 
 import { useCanvasStore } from '@/store/canvas-store';
@@ -10,7 +11,8 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { SystemSelector } from '../system-selector';
 import { clsx } from 'clsx';
-import { runProjectSummaryAction } from '@/app/actions/simulation';
+// 🚩 CORRECTION: Ajout de l'import des actions de simulation
+import { runProjectSummaryAction, runGlobalProjectSimulation, generateProposalAction } from '@/app/actions/simulation';
 import { saveGraph } from '@/app/actions/graph';
 import { useState, useRef, useMemo } from 'react';
 import { getDomainConfig } from '@/lib/registry';
@@ -56,7 +58,7 @@ const VIEW_CONFIG: Record<ViewMode, { icon: any; label: { fr: string; en: string
 export function UniversalHeader({ projectName, projectId, domainId, systems, currentSystemId }: UniversalHeaderProps) {
   // 1. DÉPENDANCES DU DOMAINE
   const pathname = usePathname(); 
-  const searchParams = useSearchParams(); // 🚩 Le hook
+  const searchParams = useSearchParams(); 
   const config = getDomainConfig(domainId);
   const params = useParams();
   const locale = (params.locale as Locale) || 'fr';
@@ -69,12 +71,13 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
   const [isSaving, setIsSaving] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isSimulatingAll, setIsSimulatingAll] = useState(false); // Ajout pour l'action globale
   const [showConsole, setShowConsole] = useState(false);
   const [logs, setLogs] = useState<any[]>([]);
   const [progress, setProgress] = useState(0);
   const [simStatus, setSimStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const abortControllerRef = useRef<AbortController | null>(null);
-  const currentView = searchParams ? searchParams.get('view') : null; // 🚩 Sécurisation
+  const currentView = searchParams ? searchParams.get('view') : null; 
 
   // 3. CONTEXTES DE NAVIGATION
   const isProjectLevel = projectId && !currentSystemId;
@@ -90,7 +93,6 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
     }
     
     setIsSaving(true);
-    // Nettoyage des nœuds pour la sauvegarde (Prisma n'a besoin que des données essentielles)
     const cleanNodes = nodes.map(n => ({
       id: n.id,
       position: n.position,
@@ -99,12 +101,10 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
     }));
 
     try {
-      // Appel à la Server Action optimisée (Bulk Write)
       const result = await saveGraph(currentSystemId, cleanNodes, edges, sequences);
       if (result.success) {
         toast.success(dict.ui.save);
       } else {
-        // Affiche l'erreur renvoyée par le serveur (ex: "IDOR Protection")
         toast.error("Erreur", { description: result.error });
       }
     } catch (e) {
@@ -116,11 +116,10 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
 
   const handleAbort = () => {
     if (abortControllerRef.current) {
-        // Envoie le signal d'annulation à la requête fetch en cours
         abortControllerRef.current.abort(); 
         abortControllerRef.current = null;
         setLogs(prev => [...prev, { 
-            message: "🛑 " + (locale === 'fr' ? "Arrêt manuel par l'utilisateur." : "Manual stop by user."), 
+            message: "🛑 " + t({fr: "Arrêt manuel par l'utilisateur.", en: "Manual stop by user."}, locale), 
             timestamp: new Date().toLocaleTimeString() 
         }]);
         setSimStatus('error');
@@ -129,7 +128,7 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
     }
   };
 
-  const handleSimulateStreaming = async () => {
+  const handleSimulate = async () => {
     if (!config?.id || !currentSystemId) {
       toast.warning("Données incomplètes (Domaine ou Système manquant)");
       return;
@@ -137,7 +136,7 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
 
     setIsSimulating(true);
     setSimStatus('running');
-    setShowConsole(true); // Ouvre la console
+    setShowConsole(true);
     setLogs([{ message: "🚀 Initialisation Quantum Engine...", timestamp: new Date().toLocaleTimeString() }]);
     setProgress(5);
 
@@ -145,14 +144,13 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
     abortControllerRef.current = controller;
 
     try {
-
-        // Nettoyage des noeuds: Exclure les résultats de la simulation précédente
+        // Préparation du payload
         const cleanNodes = nodes.map(n => {
-            // Copie des propriétés SANS la clé 'simulationResults'
             const { simulationResults, ...cleanProps } = n.data.properties;
             return { 
                 id: n.id, 
                 type: n.type, 
+                data: n.data,
                 properties: cleanProps // <-- ENVOIE SEULEMENT LES INPUTS UTILISATEUR
             };
         });
@@ -160,13 +158,10 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
         const payloadToSend = {
             projectId,
             domain: config.id,
-            nodes: cleanNodes, // <-- Utilise la version nettoyée
+            nodes: cleanNodes,
             edges: edges.map(e => ({ source: e.source, target: e.target, properties: e.data })),
             sequences,
         };
-
-        console.log("PAYLOAD FINAL ENVOYÉ À PYTHON (Inputs Nus) :", JSON.stringify(payloadToSend, null, 2));
-
 
         // Appel à l'API Route Next.js (Proxy Sécurisé)
         const response = await fetch('/api/simulation/stream', {
@@ -185,7 +180,7 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
-        let finalData: any = null; // Pour capturer le résultat final
+        let finalData: any = null; 
 
         // Boucle de lecture du flux NDJSON
         while (true) {
@@ -203,43 +198,88 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
                     if (msg.type === 'log') {
                         setLogs(prev => [...prev, { message: msg.message, timestamp: new Date().toLocaleTimeString() }]);
                         if (msg.progress) setProgress(msg.progress);
+                    } else if (msg.type === 'warning') {
+                        setLogs(prev => [...prev, { message: `⚠️ WARNING: ${msg.message}`, timestamp: new Date().toLocaleTimeString() }]);
                     } else if (msg.type === 'result') {
-                        finalData = msg.data; // Capture le résultat final
+                        finalData = msg.data; 
                         const res = msg.data;
-                        console.log("DEBUG HEADER: Final Data Received from Python:", res);
-                        // 🚩 Injection des résultats pour le SmartNode
-                        Object.keys(res.node_details || {}).forEach(id => 
-                            store.updateNodeProperties(id, { simulationResults: res.node_details[id] })
+                        
+                        // 🚩 POINT CLÉ DE LA CORRECTION : Protection du ForEach dans l'injection
+                        const nodeDetails = res.node_details ?? {}; 
+                        Object.keys(nodeDetails).forEach(id => 
+                            store.updateNodeProperties(id, { simulationResults: nodeDetails[id] })
                         );
+                        
                         store.setSummaryData(res);
                         setSimStatus('success');
                         toast.success("Simulation terminée");
                     } else if (msg.type === 'error') {
-                        // Si le solveur Python renvoie une erreur métier
                         throw new Error(msg.message); 
                     }
-                } catch (e) { /* Ignore partial JSON ou petites erreurs */ }
+                } catch (e) { 
+                    setLogs(prev => [...prev, { message: `🐛 JSON Error: ${e.message}. Partial chunk ignored.`, timestamp: new Date().toLocaleTimeString() }]);
+                }
             }
         }
-        
-        // 🚩 Une fois le stream terminé, on persiste le résultat final en base
-        if (finalData) {
-            // NOTE: Ceci sera remplacé par la vraie Server Action de persistance
-            console.log("Persisting final simulation data...");
-        }
-
-
     } catch (error: any) {
-        if (error.name === 'AbortError') return; // Annulation manuelle
-        setLogs(prev => [...prev, { message: `❌ ERROR: ${error.message}`, timestamp: new Date().toLocaleTimeString() }]);
+        if (error.name === 'AbortError') return; 
+        setLogs(prev => [...prev, { message: `❌ CRITICAL ERROR: ${error.message}`, timestamp: new Date().toLocaleTimeString() }]);
         setSimStatus('error');
+        setProgress(100);
         toast.error("Erreur de Simulation", { description: error.message });
     } finally {
-        // 🚩 TRÈS IMPORTANT : Réinitialisation propre
         setIsSimulating(false);
         abortControllerRef.current = null;
     }
   };
+
+  const handleSimulateAll = async () => {
+    if (!projectId || !domainId) {
+        toast.error("Erreur de contexte", { description: "Projet ou Domaine manquant." });
+        return;
+    }
+    
+    setIsSimulatingAll(true);
+    setSimStatus('running');
+    setShowConsole(true);
+    setLogs([{ message: t({fr: '🚀 Initialisation Orchestrateur Projet...', en: 'Project Orchestrator Initializing...'}, locale), timestamp: new Date().toLocaleTimeString() }]);
+    setProgress(5);
+
+    try {
+        // L'action server appelle l'Engine en mode synchrone, on attend la réponse complète.
+        const response = await runGlobalProjectSimulation(projectId);
+
+        if (response.success && response.data?.status === 'success') {
+            
+            setLogs(prev => [...prev, { message: t({fr: '✅ Orchestration terminée. Sauvegarde des flux en base de données.', en: 'Orchestration complete. Saving stream data to database.'}, locale), timestamp: new Date().toLocaleTimeString() }]);
+            
+            // Mise à jour de l'UI
+            store.setSummaryData(response.data.results); 
+            setViewMode('SUMMARY'); 
+            
+            setProgress(100);
+            setSimStatus('success');
+            toast.success(t({fr: 'Simulation globale terminée.', en: 'Global simulation complete.'}, locale));
+
+        } else {
+            // L'erreur vient du solveur orchestrateur (status: "error" dans le JSON)
+            const errorMessage = response.data?.message || response.error || t({fr: 'Erreur inconnue lors de l’orchestration.', en: 'Unknown error during orchestration.'}, locale);
+            
+            setLogs(prev => [...prev, { message: `❌ ERREUR: ${errorMessage}`, timestamp: new Date().toLocaleTimeString() }]);
+            setProgress(100);
+            setSimStatus('error');
+            toast.error(t({fr: 'Échec de la simulation globale.', en: 'Global simulation failed.'}, locale), { description: errorMessage });
+        }
+    } catch (error: any) {
+        // Erreur réseau ou exception inattendue du Server Action
+        setLogs(prev => [...prev, { message: `❌ ERREUR CRITIQUE: ${error.message}`, timestamp: new Date().toLocaleTimeString() }]);
+        setProgress(100);
+        setSimStatus('error');
+        toast.error(t({fr: 'Échec réseau/serveur.', en: 'Network/server failure.'}, locale));
+    } finally {
+        setIsSimulatingAll(false);
+    }
+  };   
 
   return (
     <>
@@ -354,14 +394,33 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
                   <Settings className="w-4 h-4" />
               </button>
               <div className="h-6 w-px bg-slate-200 mx-1" />
+              
+              {/* Bouton IA Offre (Réintégré pour la complétude) */}
               <button 
-                  onClick={handleSimulateStreaming} 
+                onClick={() => generateProposalAction(domainId, nodes as any, edges as any, sequences as any)} // Forcé à any pour le typage rapide
+                disabled={isSimulating || isSimulatingAll || nodes.length === 0}
+                className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-purple-600 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 disabled:opacity-30 transition-all"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span className="hidden xl:inline">IA Offre</span>
+              </button>
+
+              <button 
+                  onClick={handleSimulate} // 👈 Utilise la fonction de streaming corrigée
                   disabled={isSimulating || nodes.length === 0}
                   className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition-all disabled:opacity-50"
               >
                   {isSimulating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-current" />}
                   <span className="hidden xl:inline">{dict.ui.simulate}</span>
               </button>
+              
+              <button onClick={handleSimulateAll} disabled={isSimulatingAll || !projectId}
+                  className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl hover:bg-emerald-100 transition-all disabled:opacity-50"
+              >
+                  {isSimulatingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Factory className="w-3.5 h-3.5" />}
+                  <span className="hidden xl:inline">Simuler Tout</span>
+              </button>
+
               <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-white bg-slate-900 rounded-xl hover:bg-black transition-all shadow-lg disabled:opacity-50">
                   {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                   <span className="hidden xl:inline">{dict.ui.save}</span>
@@ -379,7 +438,15 @@ export function UniversalHeader({ projectName, projectId, domainId, systems, cur
           onClose={() => setIsSettingsOpen(false)} 
         />
       )}
-      <SimulationConsole isOpen={showConsole} onClose={() => setShowConsole(false)} logs={logs} progress={progress} status={simStatus} onAbort={handleAbort} />
+      {/* 🚩 CONSOLE DE SIMULATION RÉACTIVÉE */}
+      <SimulationConsole 
+        isOpen={showConsole} 
+        onClose={() => setShowConsole(false)} 
+        logs={logs} 
+        progress={progress} 
+        status={simStatus} 
+        onAbort={handleAbort} 
+      />
     </>
   );
 }

@@ -5,3 +5,8 @@ pydantic>=2.6.0
 python-multipart
 pytest 
 pytest-asyncio
+pandas 
+networkx 
+scipy 
+matplotlib 
+sphinx

@@ -14,7 +14,9 @@ services:
 
   # 2. Moteur de Calcul (Python)
   engine:
-    build: ./apps/engine
+    build:
+      context: .
+      dockerfile: ./apps/engine/Dockerfile
     container_name: qcore_engine
     ports:
       - "8000:8000"

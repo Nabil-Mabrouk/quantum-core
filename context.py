@@ -3,7 +3,7 @@ import os
 # --- CONFIGURATION ---
 # Directories to completely ignore
 IGNORE_DIRS = {
-    'node_modules', '.next', '.venv', '.git', '.vincent', 
+    'node_modules', '.next', '.venv', '.git', '.vincent', '.turbo'
     'dist', 'build', '__pycache__', '.vscode', 'Book', 'docs', 'ressources', 'venv'
 }
 
@@ -15,7 +15,7 @@ IGNORE_FILES = {
 # File extensions to include
 INCLUDE_EXTENSIONS = {
     '.ts', '.tsx', '.js', '.jsx', '.json', '.prisma', 
-    '.py', '.css', '.html', '.md', '.env', '.yml', '.yaml', '.mjs'
+    '.py', '.css', '.html', '.env', '.yml', '.yaml', '.mjs'
 }
 
 OUTPUT_FILE = "project_summary.txt"

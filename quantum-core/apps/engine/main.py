@@ -3,25 +3,29 @@ import os
 import logging
 import json
 import asyncio
-import secrets  # Pour une comparaison de secret sécurisée
-from fastapi import FastAPI, Header, HTTPException, Depends, Request 
+import secrets
+from fastapi import FastAPI, Header, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional, Callable, Awaitable
 
 # --- REGISTRE DES SOLVEURS (ENGINEERING OS PATTERN) ---
-# Centralise ici les points d'entrée des domaines. 
-# main.py ne connaît plus la logique interne des domaines.
+# Chaque solveur doit être un générateur asynchrone (AsyncGenerator)
 from domains.surface_treatment.solver import run_surface_simulation_stream
 
-SOLVER_REGISTRY: Dict[str, Callable] = {
+# 🚩 NOTE: Le type de la fonction est corrigé pour refléter l'AsyncGenerator
+SolverFunction = Callable[..., Awaitable[Any]] 
+
+SOLVER_REGISTRY: Dict[str, SolverFunction] = {
     "SURFACE_TREATMENT": run_surface_simulation_stream,
-    # "AI_FACTORY": run_ai_factory_stream, <-- Futur domaine
+    # "AI_FACTORY": run_ai_factory_stream, # Doit être un générateur asynchrone
 }
 
 import orchestrator 
 
 # --- CONFIGURATION DU LOGGING (JSON) ---
+# Le logger est bien initialisé ici. Il est essentiel que le logger
+# soit configuré TÔT dans le point d'entrée pour capturer tous les événements.
 class JsonFormatter(logging.Formatter):
     STANDARD_ATTRS = {
         'args', 'asctime', 'created', 'exc_info', 'exc_text', 'filename',
@@ -67,7 +71,6 @@ INTERNAL_SECRET = os.getenv("INTERNAL_API_SECRET")
 async def startup_event():
     if not INTERNAL_SECRET:
         logger.error("CRITICAL: INTERNAL_API_SECRET is not set in environment variables!")
-        # En production, on pourrait forcer l'arrêt ici
 
 # --- MODÈLES DE DONNÉES (Génériques) ---
 
@@ -117,9 +120,7 @@ class ProjectPayload(BaseModel):
     streams: List[ProjectStream]
     library: Optional[Dict[str, Any]] = None
     project_settings: Optional[Dict[str, Any]] = {}
-
 # --- SÉCURITÉ ---
-
 async def verify_secret(x_internal_secret: str = Header(None)):
     """
     Vérification Zero-Trust avec protection contre les attaques temporelles.
@@ -127,7 +128,6 @@ async def verify_secret(x_internal_secret: str = Header(None)):
     if not INTERNAL_SECRET:
         raise HTTPException(status_code=500, detail="Server misconfigured: Secret missing")
     
-    # compare_digest évite de révéler quelle partie du secret est correcte via le temps de réponse
     if not x_internal_secret or not secrets.compare_digest(x_internal_secret, INTERNAL_SECRET):
         logger.warning("Tentative d'accès non autorisée rejetée.")
         raise HTTPException(status_code=403, detail="Forbidden: Invalid API Secret")
@@ -139,6 +139,7 @@ async def simulate_stream(payload: SimulationPayload):
     """
     Endpoint de Streaming Agnostique.
     Détermine le solveur dynamiquement via le registre.
+    🚩 Toutes les simulations doivent être asynchrones (via générateur).
     """
     logger.info(f"Simulation demandée pour le domaine: {payload.domain}")
 
@@ -149,10 +150,11 @@ async def simulate_stream(payload: SimulationPayload):
         raise HTTPException(status_code=400, detail=f"Domaine {payload.domain} non supporté par ce moteur.")
 
     try:
-        # Conversion unique du payload pour NumPy/Logic métier
-        # model_dump est plus performant que json.loads(payload.json())
         data = payload.model_dump()
 
+        # 🚩 ASSURER QUE solver_func EST UN GÉNÉRATEUR ASYNCHRONE
+        # Si le solveur n'est pas un générateur, cette approche lèverait une erreur.
+        # Le solveur Surface Treatment l'est bien.
         return StreamingResponse(
             solver_func(
                 data['nodes'],
@@ -164,51 +166,26 @@ async def simulate_stream(payload: SimulationPayload):
             media_type="application/x-ndjson"
         )
     except Exception as e:
+        # Gère les erreurs internes du solveur qui n'auraient pas été catchées par le solveur lui-même
         logger.error(f"Erreur Solveur [{payload.domain}]: {str(e)}", exc_info=True)
+        # 🚩 L'erreur est remontée avec le message pour le client
         raise HTTPException(status_code=500, detail=f"Erreur interne du solveur: {str(e)}")
 
 
-@app.post("/simulate", dependencies=[Depends(verify_secret)])
-async def simulate(payload: SimulationPayload):
-    """
-    Version Synchrone de /simulate-stream. 
-    Utile pour les outils de test ou les intégrations Legacy.
-    """
-    # On réutilise la logique de streaming mais on consomme tout avant de répondre
-    response = await simulate_stream(payload)
-    
-    final_result = None
-    errors = []
-
-    async for chunk in response.body_iterator:
-        if not chunk.strip(): continue
-        for line in chunk.decode().split('\n'):
-            if not line.strip(): continue
-            try:
-                msg = json.loads(line)
-                if msg.get('type') == 'result':
-                    final_result = msg['data']
-                elif msg.get('type') == 'error':
-                    errors.append(msg['message'])
-            except json.JSONDecodeError:
-                continue
-
-    if errors:
-        raise HTTPException(status_code=400, detail=errors)
-    
-    if final_result:
-        return final_result
-    
-    raise HTTPException(status_code=500, detail="Le solveur n'a retourné aucun résultat final.")
+# 🚩 SUPPRESSION DE L'ENDPOINT /simulate
+# Le mode synchrone est désormais implémenté dans l'action côté Next.js
+# en appelant /simulate-stream et en consommant le flux (voir _simulation.ts)
 
 
 @app.post("/solve-project", dependencies=[Depends(verify_secret)])
 async def solve_project(payload: ProjectPayload):
     """
     Orchestrateur global pour les projets complexes (System of Systems).
+    Doit être async car l'orchestrateur appelle des solveurs asynchrones.
     """
     logger.info(f"Orchestration globale du projet: {payload.projectId}")
     try:
+        # L'orchestrateur est une fonction asynchrone (async def solve(payload))
         return await orchestrator.solve(payload)
     except Exception as e:
         logger.error(f"Erreur Orchestration: {str(e)}", exc_info=True)
@@ -220,6 +197,7 @@ async def solve_project(payload: ProjectPayload):
 async def evaluate_node(payload: Dict[str, Any]):
     """
     Calcul local ultra-rapide sans graphe complet.
+    🚩 TODO: Développer cette fonction pour appeler une fonction synchrone rapide.
     """
     return {"computed": {}}
 
