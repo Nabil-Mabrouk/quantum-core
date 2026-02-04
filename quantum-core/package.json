@@ -2,8 +2,8 @@
   "name": "quantum-core",
   "private": true,
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"

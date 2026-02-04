@@ -7,9 +7,10 @@ from typing import List, Dict, Any, AsyncGenerator
 
 # Import quantum-st (installé via pip)
 from quantum_st import Workshop, ProcessNode, ProcessSequence, ProcessStep, Flow
-# 🚩 CORRECTION: On importe NodeType pour la vérification du type de nœud.
 from quantum_st.core.enums import NodeType, FlowType
 from quantum_st.solver.stationary import StationarySolver
+# 🚩 Import du solveur global pour les futurs domaines
+from quantum_st.solver.global_solver import GlobalSolver 
 
 from .adapter_quantum_st import payload_to_workshop, quantum_results_to_legacy
 
@@ -24,7 +25,6 @@ async def run_surface_simulation_stream(
 ) -> AsyncGenerator[str, None]:
     """
     Solveur de traitement de surface utilisant quantum-st.
-    Remplace complètement l'ancien solveur numpy.
     """
     try:
         # Étape 1: Construction du modèle
@@ -34,7 +34,6 @@ async def run_surface_simulation_stream(
             "progress": 10
         }) + "\n"
         
-        # Simuler un temps de traitement pour le streaming
         await asyncio.sleep(0.05)
         
         payload = {
@@ -49,12 +48,22 @@ async def run_surface_simulation_stream(
         
         # Validation
         validation = workshop.validate()
+        
+        # 🚩 ENRICHISSEMENT du LOG : Afficher les issues de validation dans la console
         if not validation['valid']:
             yield json.dumps({
                 "type": "warning",
-                "message": f"Validation du modèle: {len(validation['issues'])} problèmes détectés",
+                "message": f"Validation du modèle: {len(validation['issues'])} problèmes détectés. Voir les détails.",
                 "details": validation['issues']
             }) + "\n"
+            
+            # 🚩 Loguer chaque issue pour le débug
+            for issue in validation['issues']:
+                 yield json.dumps({
+                    "type": "log", 
+                    "message": f" [Issue] {issue}", 
+                    "progress": 12 
+                }) + "\n"
         
         # Étape 2: Extraction des ions
         yield json.dumps({
@@ -62,16 +71,14 @@ async def run_surface_simulation_stream(
             "message": "🧪 Identification des espèces ioniques...", 
             "progress": 25
         }) + "\n"
-
+        
         # On s'assure d'avoir la liste des ions à simuler
         ions = [
             item['id'] for item in library.get('baseUnits', [])
-            # On cherche les items qui sont des Ions et qui sont actifs dans la librairie
             if item.get('category') == 'ION'
         ]
         
         if not ions:
-            # Ions par défaut si la library est vide (nécessaire pour que le solveur tourne)
             ions = ["Zn2+", "Cl-", "Na+", "OH-", "SO4--", "H+", "Fe2+", "Al3+"]
             yield json.dumps({
                 "type": "log",
@@ -80,38 +87,44 @@ async def run_surface_simulation_stream(
         
         await asyncio.sleep(0.05)
 
+        # 🚩 Détermination du solveur (GlobalSolver si couplage, sinon Stationary)
+        solver_class = GlobalSolver if len(workshop.lines) > 1 or len(workshop.get_coupling_matrix()) > 0 else StationarySolver
+        
         # Étape 3: Résolution matricielle
         yield json.dumps({
             "type": "log", 
-            "message": f"🧮 Résolution du système linéaire ({len(ions)} ions, {validation.get('n_variables', 0)} variables)...", 
+            "message": f"🧮 Initialisation {solver_class.__name__} ({len(ions)} ions, {validation.get('n_variables', 0)} variables)...", 
             "progress": 50
         }) + "\n"
         
-        solver = StationarySolver(workshop)
+        solver = solver_class(workshop)
+        
+        # Vérification critique des variables (0 variables mène au crash)
+        if solver.builder.n == 0:
+             raise ValueError("TOPOLOGY_ERROR: Aucun nœud variable (Rinçage/Stockage) trouvé. Le solveur ne peut rien calculer.")
         
         # Utilisation du solveur direct (sparse matrix)
         results_df = solver.solve(ions, method='direct')
         
         # Vérification des résultats
         if results_df.empty:
-            raise ValueError("Le solveur n'a retourné aucun résultat")
+             # 🚩 LOG ENRICHI : Inclut le message pour 0 résultats (souvent lié à 0 débit)
+             raise ValueError("MATH_ERROR: Le solveur n'a retourné aucun résultat. Vérifiez que les flux (Qd, Qhyd) sont > 0.")
         
         await asyncio.sleep(0.1)
 
         # Étape 4: Calcul des bilans globaux
         yield json.dumps({
             "type": "log", 
-            "message": "📊 Calcul des bilans de masse...", 
+            "message": "📊 Calcul des bilans de masse et des KPI globaux...", 
             "progress": 75
         }) + "\n"
         
-        # Calcul des KPIs globaux
+        # ... (Logique de calcul des KPIs globaux - conservée)
         total_water = 0.0
         for node_id, node_data in workshop.graph.nodes(data=True):
             node = node_data.get('data')
-            # 🚩 CORRECTION: Utilisation de NodeType.SOURCE (nœud) au lieu de FlowType.SOURCE (arête)
             if node and node.node_type == NodeType.SOURCE:
-                # Calcul du débit sortant de la source
                 for _, target, edge_data in workshop.graph.out_edges(node_id, data=True):
                     flow = edge_data.get('data')
                     if flow:
@@ -122,7 +135,7 @@ async def run_surface_simulation_stream(
         # Étape 5: Formatage des résultats pour le frontend
         yield json.dumps({
             "type": "log", 
-            "message": "✅ Finalisation...", 
+            "message": "✅ Finalisation et formatage des données (Legacy)...", 
             "progress": 90
         }) + "\n"
         
@@ -135,7 +148,6 @@ async def run_surface_simulation_stream(
             "global_kpis": {
                 "total_water_consumption": round(total_water, 2),
                 "n_nodes": validation.get('n_nodes', 0),
-                # 🚩 Correction: Utilisation de n_variables pour l'affichage des équations
                 "n_equations": len(ions) * validation.get('n_variables', 0), 
                 "ions_calculated": ions
             }
@@ -150,12 +162,13 @@ async def run_surface_simulation_stream(
         }) + "\n"
         
     except Exception as e:
-        logger.error(f"Erreur solver quantum-st: {str(e)}", exc_info=True)
-        # 🚩 On s'assure d'inclure le message complet d'erreur de la librairie
+        # 🚩 CORRECTION: Supprimer le raise pour assurer une fermeture de flux propre (comme discuté)
+        # On logue l'erreur complète sur le serveur pour le dev.
+        logger.error(f"Erreur solver quantum-st (Final Catch): {str(e)}", exc_info=True)
+        # On envoie un message d'erreur enrichi au client.
         yield json.dumps({
             "type": "error", 
             "message": str(e),
-            "details": "Une erreur est survenue lors de la résolution du système"
+            "details": "Une erreur interne a arrêté la simulation. Voir le log pour le détail."
         }) + "\n"
-        # Révèle l'exception pour être catchée par l'API (pour le 500 HTTP)
-        raise
+        # 🚩 Le générateur se termine ici, fermant le flux de manière non-violente.

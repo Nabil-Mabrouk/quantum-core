@@ -139,7 +139,6 @@ async def simulate_stream(payload: SimulationPayload):
     """
     Endpoint de Streaming Agnostique.
     Détermine le solveur dynamiquement via le registre.
-    🚩 Toutes les simulations doivent être asynchrones (via générateur).
     """
     logger.info(f"Simulation demandée pour le domaine: {payload.domain}")
 
@@ -152,9 +151,10 @@ async def simulate_stream(payload: SimulationPayload):
     try:
         data = payload.model_dump()
 
-        # 🚩 ASSURER QUE solver_func EST UN GÉNÉRATEUR ASYNCHRONE
-        # Si le solveur n'est pas un générateur, cette approche lèverait une erreur.
-        # Le solveur Surface Treatment l'est bien.
+        # 🚩 AJOUT DE L'IMPRESSION DU PAYLOAD POUR LE DÉBOGAGE
+        # NOTE: Le logger formatte ceci en JSON si logging.INFO est actif
+        logger.info(f"PAYLOAD COMPLET VERS SOLVEUR : \n{json.dumps(data, indent=2)}") 
+        
         return StreamingResponse(
             solver_func(
                 data['nodes'],
@@ -166,26 +166,18 @@ async def simulate_stream(payload: SimulationPayload):
             media_type="application/x-ndjson"
         )
     except Exception as e:
-        # Gère les erreurs internes du solveur qui n'auraient pas été catchées par le solveur lui-même
+        # Gère les erreurs internes du solveur
         logger.error(f"Erreur Solveur [{payload.domain}]: {str(e)}", exc_info=True)
-        # 🚩 L'erreur est remontée avec le message pour le client
         raise HTTPException(status_code=500, detail=f"Erreur interne du solveur: {str(e)}")
-
-
-# 🚩 SUPPRESSION DE L'ENDPOINT /simulate
-# Le mode synchrone est désormais implémenté dans l'action côté Next.js
-# en appelant /simulate-stream et en consommant le flux (voir _simulation.ts)
 
 
 @app.post("/solve-project", dependencies=[Depends(verify_secret)])
 async def solve_project(payload: ProjectPayload):
     """
     Orchestrateur global pour les projets complexes (System of Systems).
-    Doit être async car l'orchestrateur appelle des solveurs asynchrones.
     """
     logger.info(f"Orchestration globale du projet: {payload.projectId}")
     try:
-        # L'orchestrateur est une fonction asynchrone (async def solve(payload))
         return await orchestrator.solve(payload)
     except Exception as e:
         logger.error(f"Erreur Orchestration: {str(e)}", exc_info=True)
@@ -197,7 +189,6 @@ async def solve_project(payload: ProjectPayload):
 async def evaluate_node(payload: Dict[str, Any]):
     """
     Calcul local ultra-rapide sans graphe complet.
-    🚩 TODO: Développer cette fonction pour appeler une fonction synchrone rapide.
     """
     return {"computed": {}}
 
