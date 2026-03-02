@@ -159,23 +159,25 @@ function createVirtualEdges(nodes: AppNodeWithData[], domainManifest: any) {
   const nodeMap = new Map(nodes.map(node => [node.id, node]));
 
   nodes.forEach(sourceNode => {
+    // Note : sourceNode.data.type donne le type (ex: RINSE_TANK)
     const nodeSchema: NodeSchema | undefined = domainManifest.nodeTypes[sourceNode.data.type];
     if (!nodeSchema) return;
 
-    // 🚩 CORRECTION DU BUG CRITIQUE (v. fournie) : nodeSchema.fields n'existe pas.
-    // Il faut itérer sur nodeSchema.groups puis sur group.fields.
+    // 🚩 CORRECTION : Itération sur les groupes de champs (comme la structure l'exige)
     (nodeSchema.groups || []).forEach(group => {
       (group.fields || []).forEach(field => {
         
         // Un champ 'node-selector' définit un lien logique (ex: un bac A puise dans un bac B)
         if (field.type === 'node-selector') {
-          const targetNodeId = sourceNode.data.properties[field.id];
+          // Utilisation de l'optional chaining pour garantir que properties existe
+          const targetNodeId = sourceNode.data.properties?.[field.id]; 
           if (targetNodeId && nodeMap.has(targetNodeId)) {
             virtualEdges.push({
               id: `virtual-${sourceNode.id}-${targetNodeId}-${field.id}`,
               source: sourceNode.id,
               target: targetNodeId,
-              type: field.id.toUpperCase(), // Le type de lien permet au solveur de savoir quel flux est concerné
+              // Le type de lien est l'ID du champ (ex: OVERFLOWTARGETID, MAKEUPSOURCEID)
+              type: field.id.toUpperCase(), 
               properties: { isVirtual: true, fieldId: field.id }
             });
           }
@@ -184,7 +186,7 @@ function createVirtualEdges(nodes: AppNodeWithData[], domainManifest: any) {
     });
   });
   return virtualEdges;
-} // 🚩 CORRECTION DU BUG DE SYNTAXE: Le bloc de code de la fonction doit se terminer ici.
+} // 🚩 FIN DE LA FONCTION : Assurez-vous que le bloc est bien fermé ici. // 🚩 CORRECTION DU BUG DE SYNTAXE: Le bloc de code de la fonction doit se terminer ici.
 
 /**
  * Fusionne les arêtes dessinées (Pipes) et les arêtes logiques (Virtual)
